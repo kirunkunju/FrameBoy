@@ -605,6 +605,61 @@
             border-color: #4a4a4a;
             color: #888;
         }
+        /* Frame context menu */
+        .frame-context-menu {
+            display: none;
+            position: fixed;
+            background: #2a2a2a;
+            border: 1px solid #4a4a4a;
+            border-radius: 4px;
+            min-width: 160px;
+            z-index: 2000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            padding: 4px 0;
+        }
+        
+        .frame-context-menu.show {
+            display: block;
+        }
+        
+        .frame-context-menu-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            padding: 8px 14px;
+            background: none;
+            border: none;
+            color: #e0e0e0;
+            text-align: left;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        
+        .frame-context-menu-item:hover {
+            background: #3a3a3a;
+        }
+        
+        .frame-context-menu-item.disabled {
+            color: #666;
+            cursor: default;
+        }
+        
+        .frame-context-menu-item.disabled:hover {
+            background: none;
+        }
+        
+        .frame-context-menu-item .shortcut {
+            font-size: 11px;
+            color: #888;
+            margin-left: 16px;
+        }
+        
+        .frame-context-menu-divider {
+            height: 1px;
+            background: #3a3a3a;
+            margin: 4px 0;
+        }
     </style>
 </head>
 <body>
@@ -634,7 +689,9 @@
                 <span id="sizeValue">5</span>
             </div>
             <div class="tool-group">
-                <button id="clearFrame">Clear Frame</button>
+                <button id="copyBtn" title="Copy selection or frame (Ctrl+C)">📋 Copy</button>
+                <button id="pasteBtn" title="Paste (Ctrl+V)">📌 Paste</button>
+                <button id="pasteInPlaceBtn" title="Paste in Place (Ctrl+Shift+V)">📍 Paste in Place</button>
                 <button id="onionSkinToggle">👁️ Onion Skin</button>
             </div>
             <div class="tool-group">
@@ -672,6 +729,8 @@
                         <button id="prevFrame">◀️</button>
                         <button id="nextFrame">▶️</button>
                         <button id="insertFrame">+ Insert Frame</button>
+                        <button id="duplicateFrame">⧉ Duplicate Frame</button>
+                        <button id="clearFrame">🧽 Clear Frame</button>
                         <button id="deleteFrame">🗑️ Delete Frame</button>
                     </div>
                     <div class="fps-control">
@@ -696,6 +755,14 @@
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- Frame context menu -->
+    <div class="frame-context-menu" id="frameContextMenu">
+        <button class="frame-context-menu-item" id="ctxCopyFrame">📋 Copy Frame<span class="shortcut">Ctrl+C</span></button>
+        <button class="frame-context-menu-item" id="ctxPasteFrame">📌 Paste Frame<span class="shortcut">Ctrl+V</span></button>
+        <div class="frame-context-menu-divider"></div>
+        <button class="frame-context-menu-item" id="ctxDuplicateFrame">✨ Duplicate Frame<span class="shortcut">Ctrl+D</span></button>
     </div>
 
     <script>
@@ -750,6 +817,11 @@
                 this.transformHandles = [];
                 this.activeHandle = null;
                 this.transformStart = null;
+                
+                // Clipboard properties
+                this.copiedSelection = null; // For selection copy/paste
+                this.copiedFrame = null; // For frame copy/paste
+                this.contextMenuFrameIndex = null; // Track which frame was right-clicked
                 
                 this.initializeFrame();
                 this.setupEventListeners();
@@ -879,6 +951,27 @@
                 document.getElementById('clearFrame').addEventListener('click', () => this.clearCurrentFrame());
                 document.getElementById('onionSkinToggle').addEventListener('click', () => this.toggleOnionSkin());
                 
+                // Copy/Paste buttons
+                document.getElementById('copyBtn').addEventListener('click', () => {
+                    if (this.selection) {
+                        this.copySelection();
+                    } else {
+                        this.copyFrame();
+                    }
+                });
+                document.getElementById('pasteBtn').addEventListener('click', () => {
+                    if (this.copiedSelection && (this.tool === 'transform' || this.tool === 'lasso')) {
+                        this.pasteSelection();
+                    } else if (this.copiedFrame) {
+                        this.pasteFrame();
+                    }
+                });
+                document.getElementById('pasteInPlaceBtn').addEventListener('click', () => {
+                    if (this.copiedSelection) {
+                        this.pasteSelectionInPlace();
+                    }
+                });
+                
                 // Undo/Redo controls
                 document.getElementById('undoBtn').addEventListener('click', () => this.undo());
                 document.getElementById('redoBtn').addEventListener('click', () => this.redo());
@@ -891,6 +984,28 @@
                     } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
                         e.preventDefault();
                         this.redo();
+                    } else if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+                        e.preventDefault();
+                        if (this.selection) {
+                            this.copySelection();
+                        } else {
+                            this.copyFrame();
+                        }
+                    } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'v' || e.key === 'V')) {
+                        e.preventDefault();
+                        if (this.copiedSelection) {
+                            this.pasteSelectionInPlace();
+                        }
+                    } else if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+                        e.preventDefault();
+                        if (this.copiedSelection && (this.tool === 'transform' || this.tool === 'lasso')) {
+                            this.pasteSelection();
+                        } else if (this.copiedFrame) {
+                            this.pasteFrame();
+                        }
+                    } else if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
+                        e.preventDefault();
+                        this.duplicateFrame();
                     } else if (e.key === 'Enter' && this.selection) {
                         e.preventDefault();
                         this.applySelection();
@@ -906,6 +1021,58 @@
                         this.clearSelection();
                         this.render();
                     }
+                    
+                    // Single-key shortcuts (only when no modifier keys held)
+                    if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+                        switch (e.key) {
+                            case 'b':
+                                e.preventDefault();
+                                this.selectTool('brush');
+                                break;
+                            case 'e':
+                                e.preventDefault();
+                                this.selectTool('eraser');
+                                break;
+                            case 'l':
+                                e.preventDefault();
+                                this.selectTool('lasso');
+                                break;
+                            case 'v':
+                                e.preventDefault();
+                                this.selectTool('transform');
+                                break;
+                            case '[':
+                                e.preventDefault();
+                                this.brushSize = Math.max(1, this.brushSize - 1);
+                                document.getElementById('brushSize').value = this.brushSize;
+                                document.getElementById('sizeValue').textContent = this.brushSize;
+                                break;
+                            case ']':
+                                e.preventDefault();
+                                this.brushSize = Math.min(50, this.brushSize + 1);
+                                document.getElementById('brushSize').value = this.brushSize;
+                                document.getElementById('sizeValue').textContent = this.brushSize;
+                                break;
+                            case 'F5':
+                                e.preventDefault();
+                                this.duplicateFrame();
+                                break;
+                            case 'F6':
+                                e.preventDefault();
+                                this.insertFrameAfterCurrent();
+                                break;
+                            case 'F7':
+                                e.preventDefault();
+                                this.deleteCurrentFrame();
+                                break;
+                            case 'Backspace':
+                                if (!this.selection) {
+                                    e.preventDefault();
+                                    this.clearCurrentFrame();
+                                }
+                                break;
+                        }
+                    }
                 });
                 
                 // Playback controls
@@ -914,9 +1081,32 @@
                 document.getElementById('prevFrame').addEventListener('click', () => this.previousFrame());
                 document.getElementById('nextFrame').addEventListener('click', () => this.nextFrame());
                 document.getElementById('insertFrame').addEventListener('click', () => this.insertFrameAfterCurrent());
+                document.getElementById('duplicateFrame').addEventListener('click', () => this.duplicateFrame());
                 document.getElementById('deleteFrame').addEventListener('click', () => this.deleteCurrentFrame());
                 document.getElementById('fpsInput').addEventListener('change', (e) => {
                     this.fps = parseInt(e.target.value);
+                });
+                
+                // Frame context menu
+                const ctxMenu = document.getElementById('frameContextMenu');
+                document.getElementById('ctxCopyFrame').addEventListener('click', () => {
+                    this.copyFrame(this.contextMenuFrameIndex);
+                    ctxMenu.classList.remove('show');
+                });
+                document.getElementById('ctxPasteFrame').addEventListener('click', () => {
+                    if (this.copiedFrame) {
+                        this.pasteFrame(this.contextMenuFrameIndex);
+                    }
+                    ctxMenu.classList.remove('show');
+                });
+                document.getElementById('ctxDuplicateFrame').addEventListener('click', () => {
+                    this.duplicateFrame(this.contextMenuFrameIndex);
+                    ctxMenu.classList.remove('show');
+                });
+                
+                // Close context menu on click outside
+                document.addEventListener('click', () => {
+                    ctxMenu.classList.remove('show');
                 });
                 
                 // Layer controls
@@ -1174,6 +1364,14 @@
                         this.transformStart = {x, y};
                         this.isTransforming = true;
                         return;
+                    }
+                    
+                    // Clicked outside selection — apply and deselect
+                    if (this.selection) {
+                        this.applySelection();
+                        this.clearSelection();
+                        this.selectTool('brush');
+                        this.render();
                     }
                     return;
                 }
@@ -1666,24 +1864,35 @@
                     return;
                 }
                 
-                // Calculate bounds
-                let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                // Calculate lasso path bounds (used as initial working area)
+                let lassoMinX = Infinity, lassoMinY = Infinity, lassoMaxX = -Infinity, lassoMaxY = -Infinity;
                 for (let point of this.lassoPath) {
-                    minX = Math.min(minX, point.x);
-                    minY = Math.min(minY, point.y);
-                    maxX = Math.max(maxX, point.x);
-                    maxY = Math.max(maxY, point.y);
+                    lassoMinX = Math.min(lassoMinX, point.x);
+                    lassoMinY = Math.min(lassoMinY, point.y);
+                    lassoMaxX = Math.max(lassoMaxX, point.x);
+                    lassoMaxY = Math.max(lassoMaxY, point.y);
                 }
                 
-                const width = maxX - minX;
-                const height = maxY - minY;
+                // Clamp to canvas bounds
+                lassoMinX = Math.max(0, Math.floor(lassoMinX));
+                lassoMinY = Math.max(0, Math.floor(lassoMinY));
+                lassoMaxX = Math.min(this.canvas.width, Math.ceil(lassoMaxX));
+                lassoMaxY = Math.min(this.canvas.height, Math.ceil(lassoMaxY));
+                
+                const lassoWidth = lassoMaxX - lassoMinX;
+                const lassoHeight = lassoMaxY - lassoMinY;
+                
+                if (lassoWidth <= 0 || lassoHeight <= 0) {
+                    this.lassoPath = [];
+                    return;
+                }
                 
                 // Get image data from current frame
                 const layer = this.getCurrentLayer();
                 const frame = layer.frames[this.currentFrameIndex];
                 const frameCtx = frame.getContext('2d');
                 
-                // Create a mask for the lasso selection
+                // Create a mask for the lasso selection (full canvas size)
                 const maskCanvas = document.createElement('canvas');
                 maskCanvas.width = this.canvas.width;
                 maskCanvas.height = this.canvas.height;
@@ -1699,28 +1908,68 @@
                 maskCtx.closePath();
                 maskCtx.fill();
                 
-                // Get the selected area
+                // Create masked selection at lasso bounds size
+                const maskedCanvas = document.createElement('canvas');
+                maskedCanvas.width = lassoWidth;
+                maskedCanvas.height = lassoHeight;
+                const maskedCtx = maskedCanvas.getContext('2d');
+                
+                // Copy frame content within lasso bounds
+                maskedCtx.drawImage(frame, lassoMinX, lassoMinY, lassoWidth, lassoHeight, 0, 0, lassoWidth, lassoHeight);
+                
+                // Apply lasso mask
+                maskedCtx.globalCompositeOperation = 'destination-in';
+                maskedCtx.drawImage(maskCanvas, lassoMinX, lassoMinY, lassoWidth, lassoHeight, 0, 0, lassoWidth, lassoHeight);
+                maskedCtx.globalCompositeOperation = 'source-over';
+                
+                // Scan pixel data to find tight bounding box of actual content
+                const pixelData = maskedCtx.getImageData(0, 0, lassoWidth, lassoHeight);
+                const pixels = pixelData.data;
+                
+                let tightMinX = lassoWidth, tightMinY = lassoHeight, tightMaxX = -1, tightMaxY = -1;
+                
+                for (let py = 0; py < lassoHeight; py++) {
+                    for (let px = 0; px < lassoWidth; px++) {
+                        const alpha = pixels[(py * lassoWidth + px) * 4 + 3];
+                        if (alpha > 0) {
+                            if (px < tightMinX) tightMinX = px;
+                            if (px > tightMaxX) tightMaxX = px;
+                            if (py < tightMinY) tightMinY = py;
+                            if (py > tightMaxY) tightMaxY = py;
+                        }
+                    }
+                }
+                
+                // If no pixels found, nothing to select
+                if (tightMaxX < 0 || tightMaxY < 0) {
+                    this.lassoPath = [];
+                    this.selectionCtx.clearRect(0, 0, this.selectionCanvas.width, this.selectionCanvas.height);
+                    return;
+                }
+                
+                // Calculate tight bounds in canvas coordinates
+                const tightWidth = tightMaxX - tightMinX + 1;
+                const tightHeight = tightMaxY - tightMinY + 1;
+                const finalX = lassoMinX + tightMinX;
+                const finalY = lassoMinY + tightMinY;
+                
+                // Create final trimmed selection canvas
                 const selectedCanvas = document.createElement('canvas');
-                selectedCanvas.width = width;
-                selectedCanvas.height = height;
+                selectedCanvas.width = tightWidth;
+                selectedCanvas.height = tightHeight;
                 const selectedCtx = selectedCanvas.getContext('2d');
                 
-                // Copy frame content
-                selectedCtx.drawImage(frame, minX, minY, width, height, 0, 0, width, height);
+                // Copy only the tight region from the masked canvas
+                selectedCtx.drawImage(maskedCanvas, tightMinX, tightMinY, tightWidth, tightHeight, 0, 0, tightWidth, tightHeight);
                 
-                // Apply mask
-                selectedCtx.globalCompositeOperation = 'destination-in';
-                selectedCtx.drawImage(maskCanvas, minX, minY, width, height, 0, 0, width, height);
-                selectedCtx.globalCompositeOperation = 'source-over';
-                
-                // Store selection
+                // Store selection with tight bounds
                 this.selection = {
                     imageData: selectedCanvas,
-                    bounds: { x: minX, y: minY, width, height },
-                    originalBounds: { x: minX, y: minY, width, height }
+                    bounds: { x: finalX, y: finalY, width: tightWidth, height: tightHeight },
+                    originalBounds: { x: finalX, y: finalY, width: tightWidth, height: tightHeight }
                 };
                 
-                // Erase selected area from original frame
+                // Erase selected area from original frame (using lasso path shape)
                 frameCtx.save();
                 frameCtx.globalCompositeOperation = 'destination-out';
                 frameCtx.beginPath();
@@ -1971,6 +2220,175 @@
                 this.selection = null;
                 this.transformHandles = [];
                 this.selectionCtx.clearRect(0, 0, this.selectionCanvas.width, this.selectionCanvas.height);
+            }
+            
+            // Clipboard Methods - Selection
+            copySelection() {
+                if (!this.selection) return;
+                
+                // Deep copy the selection image data to a new canvas
+                const copyCanvas = document.createElement('canvas');
+                copyCanvas.width = this.selection.imageData.width;
+                copyCanvas.height = this.selection.imageData.height;
+                const copyCtx = copyCanvas.getContext('2d');
+                copyCtx.drawImage(this.selection.imageData, 0, 0);
+                
+                this.copiedSelection = {
+                    imageData: copyCanvas,
+                    width: this.selection.bounds.width,
+                    height: this.selection.bounds.height,
+                    x: this.selection.bounds.x,
+                    y: this.selection.bounds.y
+                };
+            }
+            
+            pasteSelection() {
+                if (!this.copiedSelection) return;
+                
+                // Apply any current selection first
+                if (this.selection) {
+                    this.applySelection();
+                    this.clearSelection();
+                }
+                
+                this.saveState();
+                
+                // Create a new canvas copy for the pasted selection
+                const pasteCanvas = document.createElement('canvas');
+                pasteCanvas.width = this.copiedSelection.imageData.width;
+                pasteCanvas.height = this.copiedSelection.imageData.height;
+                const pasteCtx = pasteCanvas.getContext('2d');
+                pasteCtx.drawImage(this.copiedSelection.imageData, 0, 0);
+                
+                // Paste centered on canvas
+                const centerX = Math.round((this.canvas.width - this.copiedSelection.width) / 2);
+                const centerY = Math.round((this.canvas.height - this.copiedSelection.height) / 2);
+                
+                this.selection = {
+                    imageData: pasteCanvas,
+                    bounds: {
+                        x: centerX,
+                        y: centerY,
+                        width: this.copiedSelection.width,
+                        height: this.copiedSelection.height
+                    },
+                    originalBounds: {
+                        x: centerX,
+                        y: centerY,
+                        width: this.copiedSelection.width,
+                        height: this.copiedSelection.height
+                    }
+                };
+                
+                // Switch to transform tool so the user can position it
+                this.selectTool('transform');
+                this.render();
+            }
+            
+            pasteSelectionInPlace() {
+                if (!this.copiedSelection) return;
+                
+                // Apply any current selection first
+                if (this.selection) {
+                    this.applySelection();
+                    this.clearSelection();
+                }
+                
+                this.saveState();
+                
+                // Create a new canvas copy for the pasted selection
+                const pasteCanvas = document.createElement('canvas');
+                pasteCanvas.width = this.copiedSelection.imageData.width;
+                pasteCanvas.height = this.copiedSelection.imageData.height;
+                const pasteCtx = pasteCanvas.getContext('2d');
+                pasteCtx.drawImage(this.copiedSelection.imageData, 0, 0);
+                
+                // Paste at original position
+                const origX = this.copiedSelection.x;
+                const origY = this.copiedSelection.y;
+                
+                this.selection = {
+                    imageData: pasteCanvas,
+                    bounds: {
+                        x: origX,
+                        y: origY,
+                        width: this.copiedSelection.width,
+                        height: this.copiedSelection.height
+                    },
+                    originalBounds: {
+                        x: origX,
+                        y: origY,
+                        width: this.copiedSelection.width,
+                        height: this.copiedSelection.height
+                    }
+                };
+                
+                // Switch to transform tool
+                this.selectTool('transform');
+                this.render();
+            }
+            
+            // Clipboard Methods - Frames
+            copyFrame(frameIndex) {
+                const layer = this.getCurrentLayer();
+                const idx = (frameIndex !== undefined) ? frameIndex : this.currentFrameIndex;
+                const sourceFrame = layer.frames[idx];
+                if (!sourceFrame) return;
+                
+                // Deep copy the frame canvas
+                const copyCanvas = document.createElement('canvas');
+                copyCanvas.width = sourceFrame.width;
+                copyCanvas.height = sourceFrame.height;
+                const copyCtx = copyCanvas.getContext('2d');
+                copyCtx.drawImage(sourceFrame, 0, 0);
+                
+                this.copiedFrame = copyCanvas;
+            }
+            
+            pasteFrame(afterIndex) {
+                if (!this.copiedFrame) return;
+                
+                this.saveState();
+                
+                const layer = this.getCurrentLayer();
+                const idx = (afterIndex !== undefined) ? afterIndex : this.currentFrameIndex;
+                
+                // Create a new canvas with the copied content
+                const newFrame = document.createElement('canvas');
+                newFrame.width = this.copiedFrame.width;
+                newFrame.height = this.copiedFrame.height;
+                const newCtx = newFrame.getContext('2d');
+                newCtx.drawImage(this.copiedFrame, 0, 0);
+                
+                // Insert after the target frame
+                layer.frames.splice(idx + 1, 0, newFrame);
+                
+                // Navigate to the pasted frame
+                this.currentFrameIndex = idx + 1;
+                this.render();
+            }
+            
+            duplicateFrame(frameIndex) {
+                const layer = this.getCurrentLayer();
+                const idx = (frameIndex !== undefined) ? frameIndex : this.currentFrameIndex;
+                const sourceFrame = layer.frames[idx];
+                if (!sourceFrame) return;
+                
+                this.saveState();
+                
+                // Deep copy the frame
+                const newFrame = document.createElement('canvas');
+                newFrame.width = sourceFrame.width;
+                newFrame.height = sourceFrame.height;
+                const newCtx = newFrame.getContext('2d');
+                newCtx.drawImage(sourceFrame, 0, 0);
+                
+                // Insert right after the source frame
+                layer.frames.splice(idx + 1, 0, newFrame);
+                
+                // Navigate to the new duplicate
+                this.currentFrameIndex = idx + 1;
+                this.render();
             }
             
             // Flood Fill (Paint Bucket) Algorithm
@@ -2408,6 +2826,37 @@
                         this.currentFrameIndex = i;
                         this.initializeFrame();
                         this.render();
+                    });
+                    
+                    // Right-click context menu
+                    frameDiv.addEventListener('contextmenu', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        this.contextMenuFrameIndex = i;
+                        
+                        const ctxMenu = document.getElementById('frameContextMenu');
+                        const pasteItem = document.getElementById('ctxPasteFrame');
+                        
+                        // Enable/disable paste based on clipboard
+                        if (this.copiedFrame) {
+                            pasteItem.classList.remove('disabled');
+                        } else {
+                            pasteItem.classList.add('disabled');
+                        }
+                        
+                        // Position the menu
+                        ctxMenu.style.left = e.clientX + 'px';
+                        ctxMenu.style.top = e.clientY + 'px';
+                        ctxMenu.classList.add('show');
+                        
+                        // Keep menu within viewport
+                        const menuRect = ctxMenu.getBoundingClientRect();
+                        if (menuRect.right > window.innerWidth) {
+                            ctxMenu.style.left = (e.clientX - menuRect.width) + 'px';
+                        }
+                        if (menuRect.bottom > window.innerHeight) {
+                            ctxMenu.style.top = (e.clientY - menuRect.height) + 'px';
+                        }
                     });
                     
                     // Drag start
