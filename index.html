@@ -1079,6 +1079,14 @@
                                     this.play();
                                 }
                                 break;
+                            case ',':
+                                e.preventDefault();
+                                this.previousFrame();
+                                break;
+                            case '.':
+                                e.preventDefault();
+                                this.goToNextFrame();
+                                break;
                         }
                     }
                 });
@@ -1855,6 +1863,15 @@
             previousFrame() {
                 if (this.currentFrameIndex > 0) {
                     this.currentFrameIndex--;
+                    this.initializeFrame();
+                    this.render();
+                }
+            }
+            
+            goToNextFrame() {
+                const layer = this.getCurrentLayer();
+                if (this.currentFrameIndex < layer.frames.length - 1) {
+                    this.currentFrameIndex++;
                     this.initializeFrame();
                     this.render();
                 }
