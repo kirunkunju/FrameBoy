@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="2D Animation Studio - Create frame-by-frame animations">
     <title>2D Animation Studio</title>
+    <!-- Gifshot library for GIF export (more reliable than gif.js) -->
+    <script src="https://cdn.jsdelivr.net/npm/gifshot@0.4.5/dist/gifshot.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -640,7 +642,13 @@
                 <button id="redoBtn">↷ Redo</button>
             </div>
             <div class="tool-group">
-                <button id="exportGif">Export Animation</button>
+                <div class="dropdown-container">
+                    <button id="exportBtn">📦 Export ▼</button>
+                    <div class="dropdown-menu" id="exportDropdown">
+                        <button class="dropdown-item" id="exportPngZip">PNG Frames (ZIP)</button>
+                        <button class="dropdown-item" id="exportGifBtn">GIF Animation</button>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -840,7 +848,7 @@
                 });
                 
                 // Shape selection
-                document.querySelectorAll('.dropdown-item').forEach(item => {
+                shapeDropdown.querySelectorAll('.dropdown-item').forEach(item => {
                     item.addEventListener('click', (e) => {
                         e.stopPropagation();
                         const shape = item.getAttribute('data-shape');
@@ -916,7 +924,21 @@
                 document.getElementById('deleteLayerBtn').addEventListener('click', () => this.deleteLayer());
                 
                 // Export
-                document.getElementById('exportGif').addEventListener('click', () => this.exportGif());
+                // Export dropdown
+                const exportBtn = document.getElementById('exportBtn');
+                const exportDropdown = document.getElementById('exportDropdown');
+                exportBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    exportDropdown.classList.toggle('show');
+                });
+                document.getElementById('exportPngZip').addEventListener('click', () => {
+                    exportDropdown.classList.remove('show');
+                    this.exportGif();
+                });
+                document.getElementById('exportGifBtn').addEventListener('click', () => {
+                    exportDropdown.classList.remove('show');
+                    this.exportAsGif();
+                });
             }
             
             selectTool(tool) {
@@ -1644,7 +1666,7 @@
                     return;
                 }
                 
-                // Calculate initial bounds from lasso path
+                // Calculate bounds
                 let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
                 for (let point of this.lassoPath) {
                     minX = Math.min(minX, point.x);
@@ -1653,8 +1675,8 @@
                     maxY = Math.max(maxY, point.y);
                 }
                 
-                const lassoWidth = maxX - minX;
-                const lassoHeight = maxY - minY;
+                const width = maxX - minX;
+                const height = maxY - minY;
                 
                 // Get image data from current frame
                 const layer = this.getCurrentLayer();
@@ -1677,95 +1699,25 @@
                 maskCtx.closePath();
                 maskCtx.fill();
                 
-                // Get the selected area with mask applied
-                const tempCanvas = document.createElement('canvas');
-                tempCanvas.width = lassoWidth;
-                tempCanvas.height = lassoHeight;
-                const tempCtx = tempCanvas.getContext('2d');
-                
-                // Copy frame content
-                tempCtx.drawImage(frame, minX, minY, lassoWidth, lassoHeight, 0, 0, lassoWidth, lassoHeight);
-                
-                // Get frame pixel data BEFORE masking
-                const frameImageData = tempCtx.getImageData(0, 0, lassoWidth, lassoHeight);
-                const framePixels = frameImageData.data;
-                
-                // Now apply mask for the final result
-                tempCtx.globalCompositeOperation = 'destination-in';
-                tempCtx.drawImage(maskCanvas, minX, minY, lassoWidth, lassoHeight, 0, 0, lassoWidth, lassoHeight);
-                tempCtx.globalCompositeOperation = 'source-over';
-                
-                // Get mask data to verify pixels are inside lasso
-                const maskImageData = maskCtx.getImageData(minX, minY, lassoWidth, lassoHeight);
-                const maskPixels = maskImageData.data;
-                
-                // Calculate TIGHT bounds by scanning frame pixels that are inside mask
-                let tightMinX = lassoWidth;
-                let tightMinY = lassoHeight;
-                let tightMaxX = 0;
-                let tightMaxY = 0;
-                let hasPixels = false;
-                
-                const alphaThreshold = 30;
-                
-                // Scan: only count frame pixels that are BOTH visible AND inside the mask
-                for (let y = 0; y < lassoHeight; y++) {
-                    for (let x = 0; x < lassoWidth; x++) {
-                        const i = (y * lassoWidth + x) * 4;
-                        
-                        // Check if pixel is inside mask (mask is white where lasso path is)
-                        const maskAlpha = maskPixels[i + 3];
-                        
-                        // Check if frame has visible content here
-                        const frameAlpha = framePixels[i + 3];
-                        
-                        // Only count if BOTH conditions true: inside mask AND has visible frame content
-                        if (maskAlpha > 0 && frameAlpha > alphaThreshold) {
-                            hasPixels = true;
-                            tightMinX = Math.min(tightMinX, x);
-                            tightMinY = Math.min(tightMinY, y);
-                            tightMaxX = Math.max(tightMaxX, x);
-                            tightMaxY = Math.max(tightMaxY, y);
-                        }
-                    }
-                }
-                
-                // If no pixels found, use the original lasso bounds as fallback
-                if (!hasPixels) {
-                    tightMinX = 0;
-                    tightMinY = 0;
-                    tightMaxX = lassoWidth - 1;
-                    tightMaxY = lassoHeight - 1;
-                }
-                
-                // Calculate tight dimensions
-                const tightWidth = tightMaxX - tightMinX + 1;
-                const tightHeight = tightMaxY - tightMinY + 1;
-                
-                // Create final canvas with tight bounds
+                // Get the selected area
                 const selectedCanvas = document.createElement('canvas');
-                selectedCanvas.width = tightWidth;
-                selectedCanvas.height = tightHeight;
+                selectedCanvas.width = width;
+                selectedCanvas.height = height;
                 const selectedCtx = selectedCanvas.getContext('2d');
                 
-                // Copy only the tight area
-                selectedCtx.drawImage(tempCanvas, tightMinX, tightMinY, tightWidth, tightHeight, 0, 0, tightWidth, tightHeight);
+                // Copy frame content
+                selectedCtx.drawImage(frame, minX, minY, width, height, 0, 0, width, height);
                 
-                // Store selection with tight bounds
+                // Apply mask
+                selectedCtx.globalCompositeOperation = 'destination-in';
+                selectedCtx.drawImage(maskCanvas, minX, minY, width, height, 0, 0, width, height);
+                selectedCtx.globalCompositeOperation = 'source-over';
+                
+                // Store selection
                 this.selection = {
                     imageData: selectedCanvas,
-                    bounds: { 
-                        x: minX + tightMinX, 
-                        y: minY + tightMinY, 
-                        width: tightWidth, 
-                        height: tightHeight 
-                    },
-                    originalBounds: { 
-                        x: minX + tightMinX, 
-                        y: minY + tightMinY, 
-                        width: tightWidth, 
-                        height: tightHeight 
-                    }
+                    bounds: { x: minX, y: minY, width, height },
+                    originalBounds: { x: minX, y: minY, width, height }
                 };
                 
                 // Erase selected area from original frame
@@ -1949,7 +1901,7 @@
                     // Apply rotation
                     this.selection.rotation = this.initialRotation + angleDelta;
                 } else {
-                    // Resize selection (edges move, anchor stays fixed)
+                    // Resize selection
                     const b = this.selection.bounds;
                     const type = this.activeHandle.type;
                     
@@ -1977,9 +1929,6 @@
                         b.width += dx;
                         if (b.width < 10) b.width = 10;
                     }
-                    
-                    // Anchor stays at its current position (doesn't move with bounds)
-                    // This means content scales around the anchor point
                     
                     this.transformStart = { x, y };
                 }
@@ -2406,7 +2355,7 @@
                             newIndex--;
                         }
                         
-                        if (this.dropPosition === 'after') {
+                        if (this.dropPosition === 'before') {
                             newIndex++;
                         }
                         
@@ -2543,19 +2492,8 @@
                     return;
                 }
                 
-                const exportBtn = document.getElementById('exportGif');
-                const originalText = exportBtn.textContent;
-                
-                // Show options
-                const choice = confirm('Click OK to download as WebM video (recommended)\nClick Cancel to download frames as PNG images');
-                
-                if (choice) {
-                    // Export as WebM video
-                    await this.exportAsVideo(exportBtn, originalText);
-                } else {
-                    // Export as PNG frames
-                    this.exportFramesAsPNG();
-                }
+                // Export as PNG frames ZIP
+                this.exportFramesAsPNG();
             }
             
             async exportAsVideo(exportBtn, originalText) {
@@ -2604,7 +2542,7 @@
                         const url = URL.createObjectURL(blob);
                         const a = document.createElement('a');
                         a.href = url;
-                        a.download = `animation-${Date.now()}.webm`;
+                        a.download = `frameboy-animation-${Date.now()}.webm`;
                         a.style.display = 'none';
                         document.body.appendChild(a);
                         a.click();
@@ -2685,7 +2623,13 @@
             }
             
             async exportFramesAsPNG() {
-                const exportBtn = document.getElementById('exportGif');
+                const exportBtn = document.getElementById('exportBtn');
+                
+                if (!exportBtn) {
+                    alert('Export button not found. Please refresh the page.');
+                    return;
+                }
+                
                 const originalText = exportBtn.textContent;
                 
                 exportBtn.textContent = 'Creating ZIP...';
@@ -2809,6 +2753,150 @@
                     
                     // Fallback to individual downloads
                     this.exportFramesIndividually();
+                }
+            }
+            
+            async exportAsGif() {
+                // Get export button with very specific check
+                const exportBtn = document.getElementById('exportBtn');
+                
+                if (!exportBtn || exportBtn.id !== 'exportBtn') {
+                    console.error('Export button not found correctly');
+                    alert('Export button not found. Please refresh the page.');
+                    return;
+                }
+                
+                const originalText = exportBtn.textContent;
+                console.log('Export button original text:', originalText);
+                
+                try {
+                    exportBtn.textContent = 'Preparing GIF...';
+                    exportBtn.disabled = true;
+                    
+                    // Calculate total frames
+                    const maxFrames = Math.max(...this.layers.map(l => l.frames.length));
+                    
+                    if (maxFrames === 0) {
+                        alert('No frames to export!');
+                        exportBtn.textContent = originalText;
+                        exportBtn.disabled = false;
+                        return;
+                    }
+                    
+                    // Check if gifshot is loaded
+                    if (typeof gifshot === 'undefined') {
+                        throw new Error('GIF library not loaded. Please refresh the page.');
+                    }
+                    
+                    // Create temporary canvas for rendering
+                    const tempCanvas = document.createElement('canvas');
+                    tempCanvas.width = this.canvas.width;
+                    tempCanvas.height = this.canvas.height;
+                    const tempCtx = tempCanvas.getContext('2d');
+                    
+                    // Render all frames as data URLs
+                    exportBtn.textContent = 'Rendering frames...';
+                    const frameImages = [];
+                    
+                    for (let i = 0; i < maxFrames; i++) {
+                        // Clear canvas
+                        tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+                        
+                        // Render all visible layers for this frame
+                        for (const layer of this.layers) {
+                            if (!layer.visible) continue;
+                            
+                            const frame = layer.frames[i];
+                            if (frame) {
+                                tempCtx.globalAlpha = layer.opacity || 1.0;
+                                tempCtx.drawImage(frame, 0, 0);
+                                tempCtx.globalAlpha = 1.0;
+                            }
+                        }
+                        
+                        // Convert to data URL
+                        frameImages.push(tempCanvas.toDataURL('image/png'));
+                        
+                        // Update progress - double check we have the right button
+                        const currentBtn = document.getElementById('exportBtn');
+                        if (currentBtn && currentBtn.id === 'exportBtn') {
+                            const progress = Math.round((i / maxFrames) * 50);
+                            currentBtn.textContent = `Rendering frames... ${progress}%`;
+                        }
+                    }
+                    
+                    // Create GIF from frames
+                    const statusBtn = document.getElementById('exportBtn');
+                    if (statusBtn && statusBtn.id === 'exportBtn') {
+                        statusBtn.textContent = 'Creating GIF... 50%';
+                    }
+                    
+                    gifshot.createGIF({
+                        images: frameImages,
+                        gifWidth: this.canvas.width,
+                        gifHeight: this.canvas.height,
+                        interval: 1 / this.fps,
+                        numFrames: maxFrames,
+                        frameDuration: 1,
+                        sampleInterval: 10,
+                        numWorkers: 2
+                    }, (obj) => {
+                        if (!obj.error) {
+                            // Convert base64 to blob
+                            const base64Data = obj.image.split(',')[1];
+                            const byteCharacters = atob(base64Data);
+                            const byteArrays = [];
+                            
+                            for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+                                const slice = byteCharacters.slice(offset, offset + 512);
+                                const byteNumbers = new Array(slice.length);
+                                for (let i = 0; i < slice.length; i++) {
+                                    byteNumbers[i] = slice.charCodeAt(i);
+                                }
+                                byteArrays.push(new Uint8Array(byteNumbers));
+                            }
+                            
+                            const blob = new Blob(byteArrays, { type: 'image/gif' });
+                            
+                            // Download
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `frameboy-animation-${Date.now()}.gif`;
+                            document.body.appendChild(a);
+                            a.click();
+                            
+                            setTimeout(() => {
+                                document.body.removeChild(a);
+                                URL.revokeObjectURL(url);
+                            }, 100);
+                            
+                            // Restore button - get fresh reference and verify it
+                            const finalBtn = document.getElementById('exportBtn');
+                            if (finalBtn && finalBtn.id === 'exportBtn') {
+                                console.log('Restoring export button to:', originalText);
+                                finalBtn.textContent = '✓ GIF Downloaded!';
+                                finalBtn.disabled = false;
+                                setTimeout(() => {
+                                    const restoreBtn = document.getElementById('exportBtn');
+                                    if (restoreBtn && restoreBtn.id === 'exportBtn') {
+                                        restoreBtn.textContent = originalText;
+                                    }
+                                }, 2000);
+                            }
+                        } else {
+                            throw new Error(obj.error);
+                        }
+                    });
+                    
+                } catch (error) {
+                    console.error('GIF export error:', error);
+                    const errorBtn = document.getElementById('exportBtn');
+                    if (errorBtn && errorBtn.id === 'exportBtn') {
+                        errorBtn.textContent = originalText;
+                        errorBtn.disabled = false;
+                    }
+                    alert(`Failed to create GIF: ${error.message}\n\nTry PNG ZIP export instead.`);
                 }
             }
             
