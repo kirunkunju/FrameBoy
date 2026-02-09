@@ -1154,9 +1154,67 @@
                 // Show transform handles if tool is transform and selection exists
                 if (tool === 'transform' && this.selection) {
                     this.showTransformHandles();
+                } else if (tool === 'transform' && !this.selection) {
+                    // Auto-select all content in the current frame
+                    this.selectAllInFrame();
                 } else {
                     this.hideTransformHandles();
                 }
+            }
+            
+            selectAllInFrame() {
+                const layer = this.getCurrentLayer();
+                const frame = layer.frames[this.currentFrameIndex];
+                if (!frame) return;
+                
+                const frameCtx = frame.getContext('2d');
+                const pixelData = frameCtx.getImageData(0, 0, frame.width, frame.height);
+                const pixels = pixelData.data;
+                
+                // Find tight bounding box of non-transparent pixels
+                let minX = frame.width, minY = frame.height, maxX = -1, maxY = -1;
+                
+                for (let py = 0; py < frame.height; py++) {
+                    for (let px = 0; px < frame.width; px++) {
+                        const alpha = pixels[(py * frame.width + px) * 4 + 3];
+                        if (alpha > 0) {
+                            if (px < minX) minX = px;
+                            if (px > maxX) maxX = px;
+                            if (py < minY) minY = py;
+                            if (py > maxY) maxY = py;
+                        }
+                    }
+                }
+                
+                // Nothing on the frame
+                if (maxX < 0 || maxY < 0) {
+                    this.hideTransformHandles();
+                    return;
+                }
+                
+                const width = maxX - minX + 1;
+                const height = maxY - minY + 1;
+                
+                // Create selection canvas with the content
+                const selectedCanvas = document.createElement('canvas');
+                selectedCanvas.width = width;
+                selectedCanvas.height = height;
+                const selectedCtx = selectedCanvas.getContext('2d');
+                selectedCtx.drawImage(frame, minX, minY, width, height, 0, 0, width, height);
+                
+                // Store selection
+                this.selection = {
+                    imageData: selectedCanvas,
+                    bounds: { x: minX, y: minY, width, height },
+                    originalBounds: { x: minX, y: minY, width, height }
+                };
+                
+                // Erase content from original frame
+                this.saveState();
+                frameCtx.clearRect(0, 0, frame.width, frame.height);
+                
+                this.showTransformHandles();
+                this.render();
             }
             
             saveState() {
