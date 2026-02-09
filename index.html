@@ -1071,6 +1071,14 @@
                                     this.clearCurrentFrame();
                                 }
                                 break;
+                            case ' ':
+                                e.preventDefault();
+                                if (this.isPlaying) {
+                                    this.stop();
+                                } else {
+                                    this.play();
+                                }
+                                break;
                         }
                     }
                 });
