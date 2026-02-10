@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="2D Animation Studio - Create frame-by-frame animations">
-    <title>FrameBoy v.0</title>
+    <title>2D Animation Studio</title>
     <!-- Gifshot library for GIF export (more reliable than gif.js) -->
     <script src="https://cdn.jsdelivr.net/npm/gifshot@0.4.5/dist/gifshot.min.js"></script>
     <style>
@@ -960,7 +960,7 @@
                     }
                 });
                 document.getElementById('pasteBtn').addEventListener('click', () => {
-                    if (this.copiedSelection && (this.tool === 'transform' || this.tool === 'lasso')) {
+                    if (this.copiedSelection) {
                         this.pasteSelection();
                     } else if (this.copiedFrame) {
                         this.pasteFrame();
@@ -998,7 +998,7 @@
                         }
                     } else if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
                         e.preventDefault();
-                        if (this.copiedSelection && (this.tool === 'transform' || this.tool === 'lasso')) {
+                        if (this.copiedSelection) {
                             this.pasteSelection();
                         } else if (this.copiedFrame) {
                             this.pasteFrame();
@@ -1815,6 +1815,7 @@
             }
             
             addLayer() {
+                this.commitSelection();
                 this.saveState();
                 
                 const newLayer = {
@@ -1838,6 +1839,7 @@
                     return;
                 }
                 
+                this.commitSelection();
                 this.saveState();
                 
                 // Find index of current layer
@@ -1861,6 +1863,7 @@
             }
             
             previousFrame() {
+                this.commitSelection();
                 if (this.currentFrameIndex > 0) {
                     this.currentFrameIndex--;
                     this.initializeFrame();
@@ -1869,6 +1872,7 @@
             }
             
             goToNextFrame() {
+                this.commitSelection();
                 const layer = this.getCurrentLayer();
                 if (this.currentFrameIndex < layer.frames.length - 1) {
                     this.currentFrameIndex++;
@@ -1878,6 +1882,7 @@
             }
             
             nextFrame() {
+                this.commitSelection();
                 const layer = this.getCurrentLayer();
                 
                 // Insert new blank frame after the current frame
@@ -1901,6 +1906,7 @@
             }
             
             deleteCurrentFrame() {
+                this.commitSelection();
                 const layer = this.getCurrentLayer();
                 
                 // Don't delete if it's the only frame
@@ -2305,6 +2311,14 @@
                 this.selectionCtx.clearRect(0, 0, this.selectionCanvas.width, this.selectionCanvas.height);
             }
             
+            // Apply any active selection back to its frame and dismiss it
+            commitSelection() {
+                if (this.selection) {
+                    this.applySelection();
+                    this.clearSelection();
+                }
+            }
+            
             // Clipboard Methods - Selection
             copySelection() {
                 if (!this.selection) return;
@@ -2323,6 +2337,12 @@
                     x: this.selection.bounds.x,
                     y: this.selection.bounds.y
                 };
+                
+                // Apply selection back to the frame and dismiss bounding box
+                this.applySelection();
+                this.clearSelection();
+                this.selectTool('brush');
+                this.render();
             }
             
             pasteSelection() {
@@ -2431,6 +2451,7 @@
             pasteFrame(afterIndex) {
                 if (!this.copiedFrame) return;
                 
+                this.commitSelection();
                 this.saveState();
                 
                 const layer = this.getCurrentLayer();
@@ -2452,6 +2473,7 @@
             }
             
             duplicateFrame(frameIndex) {
+                this.commitSelection();
                 const layer = this.getCurrentLayer();
                 const idx = (frameIndex !== undefined) ? frameIndex : this.currentFrameIndex;
                 const sourceFrame = layer.frames[idx];
@@ -2622,6 +2644,7 @@
             
             play() {
                 if (this.isPlaying) return;
+                this.commitSelection();
                 this.isPlaying = true;
                 
                 const layer = this.getCurrentLayer();
@@ -2792,6 +2815,7 @@
                             layer.visible = !layer.visible;
                             this.render();
                         } else {
+                            this.commitSelection();
                             this.currentLayerId = layer.id;
                             this.initializeFrame();
                             this.render();
@@ -2906,6 +2930,7 @@
                             this.justDropped = false;
                             return;
                         }
+                        this.commitSelection();
                         this.currentFrameIndex = i;
                         this.initializeFrame();
                         this.render();
