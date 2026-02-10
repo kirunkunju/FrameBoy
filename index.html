@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="2D Animation Studio - Create frame-by-frame animations">
-    <title>FrameBoy v.0</title>
+    <title>FrameBoy.v0</title>
     <!-- Gifshot library for GIF export (more reliable than gif.js) -->
     <script src="https://cdn.jsdelivr.net/npm/gifshot@0.4.5/dist/gifshot.min.js"></script>
     <style>
@@ -1973,10 +1973,13 @@
                 // Draw the frame artwork
                 tempCtx.drawImage(frame, 0, 0);
                 
-                // Tint only the opaque pixels using source-atop
+                // Apply a semi-transparent tint over only the artwork pixels
+                // source-atop draws only where existing pixels are opaque
                 tempCtx.globalCompositeOperation = 'source-atop';
+                tempCtx.globalAlpha = 0.5;
                 tempCtx.fillStyle = tintColor;
                 tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+                tempCtx.globalAlpha = 1;
                 tempCtx.globalCompositeOperation = 'source-over';
                 
                 // Draw the tinted result onto the onion canvas
