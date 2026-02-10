@@ -605,6 +605,90 @@
             border-color: #4a4a4a;
             color: #888;
         }
+        /* Brush cursor overlay */
+        .brush-cursor {
+            position: fixed;
+            pointer-events: none;
+            z-index: 100;
+            border: 1.5px solid rgba(0, 102, 204, 0.8);
+            display: none;
+            transform: translate(-50%, -50%);
+            mix-blend-mode: difference;
+        }
+        
+        .brush-cursor.round {
+            border-radius: 50%;
+        }
+        
+        .brush-cursor.square {
+            border-radius: 0;
+        }
+        
+        .brush-cursor.oval-h {
+            border-radius: 50%;
+        }
+        
+        .brush-cursor.oval-v {
+            border-radius: 50%;
+        }
+        
+        /* Brush/Eraser dropdown panel */
+        .brush-dropdown {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            background: #2a2a2a;
+            border: 1px solid #4a4a4a;
+            border-radius: 4px;
+            margin-top: 2px;
+            min-width: 200px;
+            z-index: 1000;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            padding: 10px;
+        }
+        
+        .brush-dropdown.show {
+            display: block;
+        }
+        
+        .brush-setting-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 12px;
+        }
+        
+        .brush-setting-row:last-child {
+            margin-bottom: 0;
+        }
+        
+        .brush-setting-row label {
+            margin-right: 8px;
+            white-space: nowrap;
+        }
+        
+        .brush-setting-row input[type="range"] {
+            width: 80px;
+        }
+        
+        .brush-setting-row select {
+            background: #3a3a3a;
+            border: 1px solid #555;
+            border-radius: 3px;
+            color: #e0e0e0;
+            padding: 3px 6px;
+            font-size: 12px;
+        }
+        
+        .brush-setting-value {
+            min-width: 28px;
+            text-align: right;
+            font-size: 11px;
+            color: #aaa;
+        }
+
         /* Onion skin dropdown panel */
         .onion-skin-dropdown {
             display: none;
@@ -740,8 +824,54 @@
         <!-- Toolbar -->
         <div class="toolbar">
             <div class="tool-group">
-                <button id="brushTool" class="active" title="Brush">🖌️ Brush</button>
-                <button id="eraserTool" title="Eraser">🧹 Eraser</button>
+                <div class="dropdown-container">
+                    <button id="brushTool" class="active" title="Brush">🖌️ Brush ▼</button>
+                    <div class="brush-dropdown" id="brushDropdown">
+                        <div class="brush-setting-row">
+                            <label>Shape:</label>
+                            <select id="brushShape">
+                                <option value="round">Round</option>
+                                <option value="square">Square</option>
+                                <option value="oval-h">Horizontal Oval</option>
+                                <option value="oval-v">Vertical Oval</option>
+                            </select>
+                        </div>
+                        <div class="brush-setting-row">
+                            <label>Diameter:</label>
+                            <input type="range" id="brushDiameter" min="1" max="100" value="5">
+                            <span class="brush-setting-value" id="brushDiameterValue">5</span>
+                        </div>
+                        <div class="brush-setting-row">
+                            <label>Smoothing:</label>
+                            <input type="range" id="brushSmoothing" min="0" max="100" value="0">
+                            <span class="brush-setting-value" id="brushSmoothingValue">0%</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="dropdown-container">
+                    <button id="eraserTool" title="Eraser">🧹 Eraser ▼</button>
+                    <div class="brush-dropdown" id="eraserDropdown">
+                        <div class="brush-setting-row">
+                            <label>Shape:</label>
+                            <select id="eraserShape">
+                                <option value="round">Round</option>
+                                <option value="square">Square</option>
+                                <option value="oval-h">Horizontal Oval</option>
+                                <option value="oval-v">Vertical Oval</option>
+                            </select>
+                        </div>
+                        <div class="brush-setting-row">
+                            <label>Diameter:</label>
+                            <input type="range" id="eraserDiameter" min="1" max="100" value="5">
+                            <span class="brush-setting-value" id="eraserDiameterValue">5</span>
+                        </div>
+                        <div class="brush-setting-row">
+                            <label>Smoothing:</label>
+                            <input type="range" id="eraserSmoothing" min="0" max="100" value="0">
+                            <span class="brush-setting-value" id="eraserSmoothingValue">0%</span>
+                        </div>
+                    </div>
+                </div>
                 <div class="dropdown-container">
                     <button id="shapeTool" title="Shapes">📐 Shapes ▼</button>
                     <div class="dropdown-menu" id="shapeDropdown">
@@ -758,7 +888,7 @@
                 <label>Color:</label>
                 <input type="color" id="colorPicker" value="#000000">
                 <label>Size:</label>
-                <input type="range" id="brushSize" min="1" max="50" value="5">
+                <input type="range" id="brushSize" min="1" max="100" value="5">
                 <span id="sizeValue">5</span>
             </div>
             <div class="tool-group">
@@ -821,6 +951,7 @@
                 <canvas id="onionCanvas" width="960" height="540"></canvas>
                 <canvas id="mainCanvas" width="960" height="540"></canvas>
                 <canvas id="selectionCanvas" width="960" height="540"></canvas>
+                <div class="brush-cursor" id="brushCursor"></div>
             </div>
         </div>
 
@@ -880,6 +1011,7 @@
                 this.onionCtx = this.onionCanvas.getContext('2d');
                 this.selectionCanvas = document.getElementById('selectionCanvas');
                 this.selectionCtx = this.selectionCanvas.getContext('2d');
+                this.brushCursor = document.getElementById('brushCursor');
                 
                 this.layers = [{ id: 1, name: 'Layer 1', visible: true, opacity: 1.0, frames: [] }];
                 this.currentLayerId = 1;
@@ -889,6 +1021,11 @@
                 this.tool = 'brush';
                 this.color = '#000000';
                 this.brushSize = 5;
+                this.brushShape = 'round';    // 'round', 'square', 'oval-h', 'oval-v'
+                this.eraserShape = 'round';
+                this.brushSmoothing = 0;      // 0-100
+                this.eraserSmoothing = 0;
+                this.smoothPoints = [];       // Buffer for smoothing
                 this.isDrawing = false;
                 this.lastX = 0;
                 this.lastY = 0;
@@ -938,6 +1075,10 @@
                 this.updateUndoRedoButtons();
                 this.positionOnionCanvas();
                 this.render();
+                
+                // Set initial cursor for brush tool
+                this.canvas.style.cursor = 'none';
+                this.selectionCanvas.style.cursor = 'none';
                 
                 // Handle window resize
                 window.addEventListener('resize', () => {
@@ -1009,11 +1150,88 @@
                 this.selectionCanvas.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
                 
                 // Tool selection
-                document.getElementById('brushTool').addEventListener('click', () => this.selectTool('brush'));
-                document.getElementById('eraserTool').addEventListener('click', () => this.selectTool('eraser'));
+                const brushBtn = document.getElementById('brushTool');
+                const brushDropdown = document.getElementById('brushDropdown');
+                const eraserBtn = document.getElementById('eraserTool');
+                const eraserDropdown = document.getElementById('eraserDropdown');
+                
+                brushBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (this.tool === 'brush') {
+                        brushDropdown.classList.toggle('show');
+                        eraserDropdown.classList.remove('show');
+                    } else {
+                        this.selectTool('brush');
+                        brushDropdown.classList.remove('show');
+                    }
+                });
+                
+                eraserBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (this.tool === 'eraser') {
+                        eraserDropdown.classList.toggle('show');
+                        brushDropdown.classList.remove('show');
+                    } else {
+                        this.selectTool('eraser');
+                        eraserDropdown.classList.remove('show');
+                    }
+                });
+                
+                // Prevent dropdown clicks from propagating
+                brushDropdown.addEventListener('click', (e) => e.stopPropagation());
+                eraserDropdown.addEventListener('click', (e) => e.stopPropagation());
+                
+                // Brush dropdown controls
+                document.getElementById('brushShape').addEventListener('change', (e) => {
+                    this.brushShape = e.target.value;
+                    this.updateBrushCursor();
+                });
+                document.getElementById('brushDiameter').addEventListener('input', (e) => {
+                    this.brushSize = parseInt(e.target.value);
+                    document.getElementById('brushDiameterValue').textContent = this.brushSize;
+                    document.getElementById('brushSize').value = this.brushSize;
+                    document.getElementById('sizeValue').textContent = this.brushSize;
+                    this.updateBrushCursor();
+                });
+                document.getElementById('brushSmoothing').addEventListener('input', (e) => {
+                    this.brushSmoothing = parseInt(e.target.value);
+                    document.getElementById('brushSmoothingValue').textContent = e.target.value + '%';
+                });
+                
+                // Eraser dropdown controls
+                document.getElementById('eraserShape').addEventListener('change', (e) => {
+                    this.eraserShape = e.target.value;
+                    this.updateBrushCursor();
+                });
+                document.getElementById('eraserDiameter').addEventListener('input', (e) => {
+                    this.brushSize = parseInt(e.target.value);
+                    document.getElementById('eraserDiameterValue').textContent = this.brushSize;
+                    document.getElementById('brushSize').value = this.brushSize;
+                    document.getElementById('sizeValue').textContent = this.brushSize;
+                    this.updateBrushCursor();
+                });
+                document.getElementById('eraserSmoothing').addEventListener('input', (e) => {
+                    this.eraserSmoothing = parseInt(e.target.value);
+                    document.getElementById('eraserSmoothingValue').textContent = e.target.value + '%';
+                });
+
                 document.getElementById('fillTool').addEventListener('click', () => this.selectTool('fill'));
                 document.getElementById('lassoTool').addEventListener('click', () => this.selectTool('lasso'));
                 document.getElementById('transformTool').addEventListener('click', () => this.selectTool('transform'));
+                
+                // Brush cursor tracking
+                const canvasContainer = document.getElementById('canvasContainer');
+                canvasContainer.addEventListener('mousemove', (e) => {
+                    if (this.tool === 'brush' || this.tool === 'eraser') {
+                        this.brushCursor.style.display = 'block';
+                        this.brushCursor.style.left = e.clientX + 'px';
+                        this.brushCursor.style.top = e.clientY + 'px';
+                        this.updateBrushCursor();
+                    }
+                });
+                canvasContainer.addEventListener('mouseleave', () => {
+                    this.brushCursor.style.display = 'none';
+                });
                 
                 // Shapes dropdown
                 const shapeButton = document.getElementById('shapeTool');
@@ -1028,6 +1246,8 @@
                 document.addEventListener('click', () => {
                     shapeDropdown.classList.remove('show');
                     onionDropdown.classList.remove('show');
+                    brushDropdown.classList.remove('show');
+                    eraserDropdown.classList.remove('show');
                 });
                 
                 // Shape selection
@@ -1056,6 +1276,8 @@
                 document.getElementById('brushSize').addEventListener('input', (e) => {
                     this.brushSize = parseInt(e.target.value);
                     document.getElementById('sizeValue').textContent = this.brushSize;
+                    this.syncBrushSizeUI();
+                    this.updateBrushCursor();
                 });
                 
                 // Frame controls
@@ -1192,12 +1414,16 @@
                                 this.brushSize = Math.max(1, this.brushSize - 1);
                                 document.getElementById('brushSize').value = this.brushSize;
                                 document.getElementById('sizeValue').textContent = this.brushSize;
+                                this.syncBrushSizeUI();
+                                this.updateBrushCursor();
                                 break;
                             case ']':
                                 e.preventDefault();
-                                this.brushSize = Math.min(50, this.brushSize + 1);
+                                this.brushSize = Math.min(100, this.brushSize + 1);
                                 document.getElementById('brushSize').value = this.brushSize;
                                 document.getElementById('sizeValue').textContent = this.brushSize;
+                                this.syncBrushSizeUI();
+                                this.updateBrushCursor();
                                 break;
                             case 'F5':
                                 e.preventDefault();
@@ -1314,6 +1540,55 @@
                 } else {
                     this.hideTransformHandles();
                 }
+                
+                // Manage brush cursor visibility and canvas default cursor
+                if (tool === 'brush' || tool === 'eraser') {
+                    this.canvas.style.cursor = 'none';
+                    this.selectionCanvas.style.cursor = 'none';
+                } else {
+                    this.canvas.style.cursor = 'crosshair';
+                    this.selectionCanvas.style.cursor = 'default';
+                    this.brushCursor.style.display = 'none';
+                }
+            }
+            
+            updateBrushCursor() {
+                const shape = this.tool === 'eraser' ? this.eraserShape : this.brushShape;
+                const rect = this.canvas.getBoundingClientRect();
+                const displayScale = rect.width / this.canvas.width;
+                const size = Math.max(2, this.brushSize * displayScale);
+                
+                let w = size, h = size;
+                if (shape === 'oval-h') {
+                    w = size;
+                    h = size * 0.4;
+                } else if (shape === 'oval-v') {
+                    w = size * 0.4;
+                    h = size;
+                }
+                
+                this.brushCursor.style.width = w + 'px';
+                this.brushCursor.style.height = h + 'px';
+                this.brushCursor.className = 'brush-cursor ' + shape;
+            }
+            
+            syncBrushSizeUI() {
+                // Sync the dropdown diameter sliders with the current brushSize
+                if (this.tool === 'brush') {
+                    document.getElementById('brushDiameter').value = this.brushSize;
+                    document.getElementById('brushDiameterValue').textContent = this.brushSize;
+                } else if (this.tool === 'eraser') {
+                    document.getElementById('eraserDiameter').value = this.brushSize;
+                    document.getElementById('eraserDiameterValue').textContent = this.brushSize;
+                }
+            }
+            
+            getCurrentBrushShape() {
+                return this.tool === 'eraser' ? this.eraserShape : this.brushShape;
+            }
+            
+            getSmoothing() {
+                return this.tool === 'eraser' ? this.eraserSmoothing : this.brushSmoothing;
             }
             
             selectAllInFrame() {
@@ -1606,6 +1881,8 @@
                 this.lastX = (e.clientX - rect.left) * scaleX;
                 this.lastY = (e.clientY - rect.top) * scaleY;
                 this.shapeStart = { x: this.lastX, y: this.lastY };
+                this.smoothX = this.lastX;
+                this.smoothY = this.lastY;
                 
                 if (this.tool === 'brush' || this.tool === 'eraser') {
                     this.drawPoint(this.lastX, this.lastY);
@@ -1685,9 +1962,20 @@
                 }
                 
                 if (this.tool === 'brush' || this.tool === 'eraser') {
-                    this.drawLine(this.lastX, this.lastY, x, y);
-                    this.lastX = x;
-                    this.lastY = y;
+                    const smoothing = this.getSmoothing();
+                    if (smoothing > 0) {
+                        // Exponential smoothing: higher smoothing = slower catch-up
+                        const factor = 1 - (smoothing / 100) * 0.95;
+                        this.smoothX += (x - this.smoothX) * factor;
+                        this.smoothY += (y - this.smoothY) * factor;
+                        this.drawLine(this.lastX, this.lastY, this.smoothX, this.smoothY);
+                        this.lastX = this.smoothX;
+                        this.lastY = this.smoothY;
+                    } else {
+                        this.drawLine(this.lastX, this.lastY, x, y);
+                        this.lastX = x;
+                        this.lastY = y;
+                    }
                 } else {
                     // Preview shape
                     this.drawShape(this.shapeStart.x, this.shapeStart.y, x, y, true);
@@ -1840,50 +2128,96 @@
                 const layer = this.getCurrentLayer();
                 const frame = layer.frames[this.currentFrameIndex];
                 const frameCtx = frame.getContext('2d');
+                const shape = this.getCurrentBrushShape();
+                const radius = this.brushSize / 2;
                 
                 frameCtx.globalCompositeOperation = this.tool === 'eraser' ? 'destination-out' : 'source-over';
                 frameCtx.fillStyle = this.color;
-                frameCtx.beginPath();
-                frameCtx.arc(x, y, this.brushSize / 2, 0, Math.PI * 2);
-                frameCtx.fill();
-                frameCtx.globalCompositeOperation = 'source-over'; // Reset
+                if (shape === 'square') {
+                    frameCtx.fillRect(x - radius, y - radius, this.brushSize, this.brushSize);
+                } else if (shape === 'oval-h') {
+                    frameCtx.beginPath();
+                    frameCtx.ellipse(x, y, radius, radius * 0.4, 0, 0, Math.PI * 2);
+                    frameCtx.fill();
+                } else if (shape === 'oval-v') {
+                    frameCtx.beginPath();
+                    frameCtx.ellipse(x, y, radius * 0.4, radius, 0, 0, Math.PI * 2);
+                    frameCtx.fill();
+                } else {
+                    frameCtx.beginPath();
+                    frameCtx.arc(x, y, radius, 0, Math.PI * 2);
+                    frameCtx.fill();
+                }
+                frameCtx.globalCompositeOperation = 'source-over';
                 
                 // Also draw directly to main canvas for immediate feedback
                 this.ctx.globalCompositeOperation = this.tool === 'eraser' ? 'destination-out' : 'source-over';
                 this.ctx.fillStyle = this.color;
-                this.ctx.beginPath();
-                this.ctx.arc(x, y, this.brushSize / 2, 0, Math.PI * 2);
-                this.ctx.fill();
-                this.ctx.globalCompositeOperation = 'source-over'; // Reset
+                if (shape === 'square') {
+                    this.ctx.fillRect(x - radius, y - radius, this.brushSize, this.brushSize);
+                } else if (shape === 'oval-h') {
+                    this.ctx.beginPath();
+                    this.ctx.ellipse(x, y, radius, radius * 0.4, 0, 0, Math.PI * 2);
+                    this.ctx.fill();
+                } else if (shape === 'oval-v') {
+                    this.ctx.beginPath();
+                    this.ctx.ellipse(x, y, radius * 0.4, radius, 0, 0, Math.PI * 2);
+                    this.ctx.fill();
+                } else {
+                    this.ctx.beginPath();
+                    this.ctx.arc(x, y, radius, 0, Math.PI * 2);
+                    this.ctx.fill();
+                }
+                this.ctx.globalCompositeOperation = 'source-over';
             }
             
             drawLine(x1, y1, x2, y2) {
                 const layer = this.getCurrentLayer();
                 const frame = layer.frames[this.currentFrameIndex];
                 const frameCtx = frame.getContext('2d');
+                const shape = this.getCurrentBrushShape();
                 
-                frameCtx.globalCompositeOperation = this.tool === 'eraser' ? 'destination-out' : 'source-over';
-                frameCtx.strokeStyle = this.color;
-                frameCtx.lineWidth = this.brushSize;
-                frameCtx.lineCap = 'round';
-                frameCtx.lineJoin = 'round';
-                frameCtx.beginPath();
-                frameCtx.moveTo(x1, y1);
-                frameCtx.lineTo(x2, y2);
-                frameCtx.stroke();
-                frameCtx.globalCompositeOperation = 'source-over'; // Reset
-                
-                // Also draw directly to main canvas for immediate feedback
-                this.ctx.globalCompositeOperation = this.tool === 'eraser' ? 'destination-out' : 'source-over';
-                this.ctx.strokeStyle = this.color;
-                this.ctx.lineWidth = this.brushSize;
-                this.ctx.lineCap = 'round';
-                this.ctx.lineJoin = 'round';
-                this.ctx.beginPath();
-                this.ctx.moveTo(x1, y1);
-                this.ctx.lineTo(x2, y2);
-                this.ctx.stroke();
-                this.ctx.globalCompositeOperation = 'source-over'; // Reset
+                if (shape === 'oval-h' || shape === 'oval-v') {
+                    // Stamp ellipses along the line path
+                    const rx = shape === 'oval-h' ? this.brushSize / 2 : this.brushSize * 0.2;
+                    const ry = shape === 'oval-v' ? this.brushSize / 2 : this.brushSize * 0.2;
+                    const dist = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+                    const step = Math.max(1, Math.min(rx, ry) * 0.3);
+                    const steps = Math.max(1, Math.ceil(dist / step));
+                    
+                    const compositeOp = this.tool === 'eraser' ? 'destination-out' : 'source-over';
+                    
+                    for (const ctx of [frameCtx, this.ctx]) {
+                        ctx.globalCompositeOperation = compositeOp;
+                        ctx.fillStyle = this.color;
+                        for (let i = 0; i <= steps; i++) {
+                            const t = i / steps;
+                            const px = x1 + (x2 - x1) * t;
+                            const py = y1 + (y2 - y1) * t;
+                            ctx.beginPath();
+                            ctx.ellipse(px, py, rx, ry, 0, 0, Math.PI * 2);
+                            ctx.fill();
+                        }
+                        ctx.globalCompositeOperation = 'source-over';
+                    }
+                } else {
+                    const cap = shape === 'square' ? 'square' : 'round';
+                    const join = shape === 'square' ? 'miter' : 'round';
+                    const compositeOp = this.tool === 'eraser' ? 'destination-out' : 'source-over';
+                    
+                    for (const ctx of [frameCtx, this.ctx]) {
+                        ctx.globalCompositeOperation = compositeOp;
+                        ctx.strokeStyle = this.color;
+                        ctx.lineWidth = this.brushSize;
+                        ctx.lineCap = cap;
+                        ctx.lineJoin = join;
+                        ctx.beginPath();
+                        ctx.moveTo(x1, y1);
+                        ctx.lineTo(x2, y2);
+                        ctx.stroke();
+                        ctx.globalCompositeOperation = 'source-over';
+                    }
+                }
             }
             
             drawShape(x1, y1, x2, y2, preview = false) {
