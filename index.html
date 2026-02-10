@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="2D Animation Studio - Create frame-by-frame animations">
-    <title>2D Animation Studio</title>
+    <title>FrameBoy v.0</title>
     <!-- Gifshot library for GIF export (more reliable than gif.js) -->
     <script src="https://cdn.jsdelivr.net/npm/gifshot@0.4.5/dist/gifshot.min.js"></script>
     <style>
@@ -605,6 +605,79 @@
             border-color: #4a4a4a;
             color: #888;
         }
+        /* Onion skin dropdown panel */
+        .onion-skin-dropdown {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            background: #2a2a2a;
+            border: 1px solid #4a4a4a;
+            border-radius: 4px;
+            margin-top: 2px;
+            min-width: 220px;
+            z-index: 1000;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            padding: 10px;
+        }
+        
+        .onion-skin-dropdown.show {
+            display: block;
+        }
+        
+        .onion-setting-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 12px;
+        }
+        
+        .onion-setting-row:last-child {
+            margin-bottom: 0;
+        }
+        
+        .onion-setting-row label {
+            margin-right: 8px;
+            white-space: nowrap;
+        }
+        
+        .onion-setting-row input[type="range"] {
+            width: 80px;
+        }
+        
+        .onion-setting-row input[type="number"] {
+            width: 45px;
+            background: #3a3a3a;
+            border: 1px solid #555;
+            border-radius: 3px;
+            color: #e0e0e0;
+            padding: 2px 4px;
+            font-size: 12px;
+        }
+        
+        .onion-setting-row input[type="color"] {
+            width: 28px;
+            height: 22px;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            padding: 0;
+        }
+        
+        .onion-setting-value {
+            min-width: 28px;
+            text-align: right;
+            font-size: 11px;
+            color: #aaa;
+        }
+        
+        .onion-divider {
+            height: 1px;
+            background: #3a3a3a;
+            margin: 8px 0;
+        }
+
         /* Frame context menu */
         .frame-context-menu {
             display: none;
@@ -692,7 +765,39 @@
                 <button id="copyBtn" title="Copy selection or frame (Ctrl+C)">📋 Copy</button>
                 <button id="pasteBtn" title="Paste (Ctrl+V)">📌 Paste</button>
                 <button id="pasteInPlaceBtn" title="Paste in Place (Ctrl+Shift+V)">📍 Paste in Place</button>
-                <button id="onionSkinToggle">👁️ Onion Skin</button>
+                <div class="dropdown-container">
+                    <button id="onionSkinToggle">👁️ Onion Skin ▼</button>
+                    <div class="onion-skin-dropdown" id="onionSkinDropdown">
+                        <div class="onion-setting-row">
+                            <label>Enabled:</label>
+                            <input type="checkbox" id="onionEnabled" checked>
+                        </div>
+                        <div class="onion-divider"></div>
+                        <div class="onion-setting-row">
+                            <label>Opacity:</label>
+                            <input type="range" id="onionOpacity" min="5" max="80" value="30">
+                            <span class="onion-setting-value" id="onionOpacityValue">30%</span>
+                        </div>
+                        <div class="onion-divider"></div>
+                        <div class="onion-setting-row">
+                            <label>Frames Before:</label>
+                            <input type="number" id="onionFramesBefore" min="0" max="10" value="1">
+                        </div>
+                        <div class="onion-setting-row">
+                            <label>Previous Color:</label>
+                            <input type="color" id="onionPrevColor" value="#ff0000">
+                        </div>
+                        <div class="onion-divider"></div>
+                        <div class="onion-setting-row">
+                            <label>Frames After:</label>
+                            <input type="number" id="onionFramesAfter" min="0" max="10" value="1">
+                        </div>
+                        <div class="onion-setting-row">
+                            <label>Next Color:</label>
+                            <input type="color" id="onionNextColor" value="#00cc00">
+                        </div>
+                    </div>
+                </div>
             </div>
             <div class="tool-group">
                 <button id="undoBtn">↶ Undo</button>
@@ -788,6 +893,11 @@
                 this.lastX = 0;
                 this.lastY = 0;
                 this.onionSkinEnabled = true;
+                this.onionSkinOpacity = 0.30;
+                this.onionFramesBefore = 1;
+                this.onionFramesAfter = 1;
+                this.onionPrevColor = '#ff0000';
+                this.onionNextColor = '#00cc00';
                 this.isPlaying = false;
                 this.fps = 12;
                 this.playbackInterval = null;
@@ -917,6 +1027,7 @@
                 // Close dropdown when clicking outside
                 document.addEventListener('click', () => {
                     shapeDropdown.classList.remove('show');
+                    onionDropdown.classList.remove('show');
                 });
                 
                 // Shape selection
@@ -949,7 +1060,42 @@
                 
                 // Frame controls
                 document.getElementById('clearFrame').addEventListener('click', () => this.clearCurrentFrame());
-                document.getElementById('onionSkinToggle').addEventListener('click', () => this.toggleOnionSkin());
+                
+                // Onion skin dropdown
+                const onionBtn = document.getElementById('onionSkinToggle');
+                const onionDropdown = document.getElementById('onionSkinDropdown');
+                onionBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    onionDropdown.classList.toggle('show');
+                });
+                onionDropdown.addEventListener('click', (e) => e.stopPropagation());
+                
+                document.getElementById('onionEnabled').addEventListener('change', (e) => {
+                    this.onionSkinEnabled = e.target.checked;
+                    onionBtn.style.opacity = this.onionSkinEnabled ? '1' : '0.5';
+                    this.render();
+                });
+                document.getElementById('onionOpacity').addEventListener('input', (e) => {
+                    this.onionSkinOpacity = parseInt(e.target.value) / 100;
+                    document.getElementById('onionOpacityValue').textContent = e.target.value + '%';
+                    this.render();
+                });
+                document.getElementById('onionFramesBefore').addEventListener('change', (e) => {
+                    this.onionFramesBefore = parseInt(e.target.value);
+                    this.render();
+                });
+                document.getElementById('onionFramesAfter').addEventListener('change', (e) => {
+                    this.onionFramesAfter = parseInt(e.target.value);
+                    this.render();
+                });
+                document.getElementById('onionPrevColor').addEventListener('input', (e) => {
+                    this.onionPrevColor = e.target.value;
+                    this.render();
+                });
+                document.getElementById('onionNextColor').addEventListener('input', (e) => {
+                    this.onionNextColor = e.target.value;
+                    this.render();
+                });
                 
                 // Copy/Paste buttons
                 document.getElementById('copyBtn').addEventListener('click', () => {
@@ -1810,8 +1956,33 @@
             toggleOnionSkin() {
                 this.onionSkinEnabled = !this.onionSkinEnabled;
                 const btn = document.getElementById('onionSkinToggle');
+                const checkbox = document.getElementById('onionEnabled');
                 btn.style.opacity = this.onionSkinEnabled ? '1' : '0.5';
+                checkbox.checked = this.onionSkinEnabled;
                 this.render();
+            }
+            
+            // Render a tinted version of a frame onto the onion canvas
+            drawOnionFrame(frame, tintColor, opacity) {
+                // Create a temp canvas to composite the tint
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = this.canvas.width;
+                tempCanvas.height = this.canvas.height;
+                const tempCtx = tempCanvas.getContext('2d');
+                
+                // Draw the frame artwork
+                tempCtx.drawImage(frame, 0, 0);
+                
+                // Tint only the opaque pixels using source-atop
+                tempCtx.globalCompositeOperation = 'source-atop';
+                tempCtx.fillStyle = tintColor;
+                tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+                tempCtx.globalCompositeOperation = 'source-over';
+                
+                // Draw the tinted result onto the onion canvas
+                this.onionCtx.globalAlpha = opacity;
+                this.onionCtx.drawImage(tempCanvas, 0, 0);
+                this.onionCtx.globalAlpha = 1;
             }
             
             addLayer() {
@@ -2680,35 +2851,29 @@
                 if (this.onionSkinEnabled) {
                     const layer = this.getCurrentLayer();
                     
-                    // Draw previous frame (reddish tint)
-                    if (this.currentFrameIndex > 0) {
-                        const prevFrame = layer.frames[this.currentFrameIndex - 1];
-                        if (prevFrame && layer.visible) {
-                            this.onionCtx.globalAlpha = 0.3;
-                            this.onionCtx.drawImage(prevFrame, 0, 0);
-                            
-                            // Add red tint
-                            this.onionCtx.globalCompositeOperation = 'multiply';
-                            this.onionCtx.fillStyle = '#ff9999';
-                            this.onionCtx.fillRect(0, 0, this.onionCanvas.width, this.onionCanvas.height);
-                            this.onionCtx.globalCompositeOperation = 'source-over';
-                            this.onionCtx.globalAlpha = 1;
+                    // Draw previous frames (tinted with prevColor)
+                    for (let offset = 1; offset <= this.onionFramesBefore; offset++) {
+                        const frameIdx = this.currentFrameIndex - offset;
+                        if (frameIdx >= 0) {
+                            const prevFrame = layer.frames[frameIdx];
+                            if (prevFrame && layer.visible) {
+                                // Fade opacity for frames further away
+                                const fadeOpacity = this.onionSkinOpacity * (1 - (offset - 1) / Math.max(this.onionFramesBefore, 1));
+                                this.drawOnionFrame(prevFrame, this.onionPrevColor, fadeOpacity);
+                            }
                         }
                     }
                     
-                    // Draw next frame (greenish tint)
-                    if (this.currentFrameIndex < layer.frames.length - 1) {
-                        const nextFrame = layer.frames[this.currentFrameIndex + 1];
-                        if (nextFrame && layer.visible) {
-                            this.onionCtx.globalAlpha = 0.3;
-                            this.onionCtx.drawImage(nextFrame, 0, 0);
-                            
-                            // Add green tint
-                            this.onionCtx.globalCompositeOperation = 'multiply';
-                            this.onionCtx.fillStyle = '#99ff99';
-                            this.onionCtx.fillRect(0, 0, this.onionCanvas.width, this.onionCanvas.height);
-                            this.onionCtx.globalCompositeOperation = 'source-over';
-                            this.onionCtx.globalAlpha = 1;
+                    // Draw next frames (tinted with nextColor)
+                    for (let offset = 1; offset <= this.onionFramesAfter; offset++) {
+                        const frameIdx = this.currentFrameIndex + offset;
+                        if (frameIdx < layer.frames.length) {
+                            const nextFrame = layer.frames[frameIdx];
+                            if (nextFrame && layer.visible) {
+                                // Fade opacity for frames further away
+                                const fadeOpacity = this.onionSkinOpacity * (1 - (offset - 1) / Math.max(this.onionFramesAfter, 1));
+                                this.drawOnionFrame(nextFrame, this.onionNextColor, fadeOpacity);
+                            }
                         }
                     }
                 }
