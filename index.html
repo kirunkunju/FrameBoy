@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="2D Animation Studio - Create frame-by-frame animations">
-    <title>Frameboy.v0</title>
+    <title>FrameBoy.v0</title>
     <!-- Gifshot library for GIF export (more reliable than gif.js) -->
     <script src="https://cdn.jsdelivr.net/npm/gifshot@0.4.5/dist/gifshot.min.js"></script>
     <style>
@@ -551,6 +551,7 @@
             transition: border-color 0.15s, transform 0.15s, opacity 0.15s;
             user-select: none;
             -webkit-user-select: none;
+            touch-action: none;
         }
         
         .frame:active {
@@ -3651,10 +3652,10 @@
                     frameNumber.textContent = i + 1;
                     frameDiv.appendChild(frameNumber);
                     
-                    // Pointer-based drag: mousedown starts potential drag
-                    frameDiv.addEventListener('mousedown', (e) => {
-                        if (e.button !== 0) return; // left click only
-                        e.preventDefault(); // prevent text selection immediately
+                    // Pointer-based drag: pointerdown starts potential drag (works with mouse, touch, pencil)
+                    frameDiv.addEventListener('pointerdown', (e) => {
+                        if (e.button && e.button !== 0) return; // left click only for mouse
+                        e.preventDefault();
                         
                         this._frameDragState = {
                             index: i,
@@ -3714,7 +3715,7 @@
                     this._dropIndicator.style.display = 'none';
                     container.appendChild(this._dropIndicator);
                     
-                    document.addEventListener('mousemove', (e) => {
+                    document.addEventListener('pointermove', (e) => {
                         if (!this._frameDragState) return;
                         
                         const state = this._frameDragState;
@@ -3790,7 +3791,7 @@
                         }
                     });
                     
-                    document.addEventListener('mouseup', (e) => {
+                    document.addEventListener('pointerup', (e) => {
                         if (!this._frameDragState) return;
                         
                         const state = this._frameDragState;
