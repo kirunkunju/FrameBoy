@@ -682,6 +682,39 @@
             font-size: 12px;
         }
         
+        .shape-picker {
+            display: flex;
+            gap: 4px;
+        }
+        
+        .shape-icon {
+            width: 30px;
+            height: 30px;
+            background: #3a3a3a;
+            border: 2px solid #555;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2px;
+        }
+        
+        .shape-icon:hover {
+            border-color: #888;
+            background: #444;
+        }
+        
+        .shape-icon.active {
+            border-color: #4a9eff;
+            background: #2a4a6a;
+        }
+        
+        .shape-icon svg {
+            width: 20px;
+            height: 20px;
+        }
+        
         .brush-setting-value {
             min-width: 28px;
             text-align: right;
@@ -829,12 +862,20 @@
                     <div class="brush-dropdown" id="brushDropdown">
                         <div class="brush-setting-row">
                             <label>Shape:</label>
-                            <select id="brushShape">
-                                <option value="round">Round</option>
-                                <option value="square">Square</option>
-                                <option value="oval-h">Horizontal Oval</option>
-                                <option value="oval-v">Vertical Oval</option>
-                            </select>
+                            <div class="shape-picker" id="brushShapePicker">
+                                <div class="shape-icon active" data-shape="round" title="Round">
+                                    <svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="8" fill="#ccc" stroke="#888" stroke-width="1"/></svg>
+                                </div>
+                                <div class="shape-icon" data-shape="square" title="Square">
+                                    <svg viewBox="0 0 20 20"><rect x="2" y="2" width="16" height="16" fill="#ccc" stroke="#888" stroke-width="1"/></svg>
+                                </div>
+                                <div class="shape-icon" data-shape="oval-h" title="Horizontal Oval">
+                                    <svg viewBox="0 0 20 20"><ellipse cx="10" cy="10" rx="9" ry="4" fill="#ccc" stroke="#888" stroke-width="1"/></svg>
+                                </div>
+                                <div class="shape-icon" data-shape="oval-v" title="Vertical Oval">
+                                    <svg viewBox="0 0 20 20"><ellipse cx="10" cy="10" rx="4" ry="9" fill="#ccc" stroke="#888" stroke-width="1"/></svg>
+                                </div>
+                            </div>
                         </div>
                         <div class="brush-setting-row">
                             <label>Diameter:</label>
@@ -853,12 +894,20 @@
                     <div class="brush-dropdown" id="eraserDropdown">
                         <div class="brush-setting-row">
                             <label>Shape:</label>
-                            <select id="eraserShape">
-                                <option value="round">Round</option>
-                                <option value="square">Square</option>
-                                <option value="oval-h">Horizontal Oval</option>
-                                <option value="oval-v">Vertical Oval</option>
-                            </select>
+                            <div class="shape-picker" id="eraserShapePicker">
+                                <div class="shape-icon active" data-shape="round" title="Round">
+                                    <svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="8" fill="#ccc" stroke="#888" stroke-width="1"/></svg>
+                                </div>
+                                <div class="shape-icon" data-shape="square" title="Square">
+                                    <svg viewBox="0 0 20 20"><rect x="2" y="2" width="16" height="16" fill="#ccc" stroke="#888" stroke-width="1"/></svg>
+                                </div>
+                                <div class="shape-icon" data-shape="oval-h" title="Horizontal Oval">
+                                    <svg viewBox="0 0 20 20"><ellipse cx="10" cy="10" rx="9" ry="4" fill="#ccc" stroke="#888" stroke-width="1"/></svg>
+                                </div>
+                                <div class="shape-icon" data-shape="oval-v" title="Vertical Oval">
+                                    <svg viewBox="0 0 20 20"><ellipse cx="10" cy="10" rx="4" ry="9" fill="#ccc" stroke="#888" stroke-width="1"/></svg>
+                                </div>
+                            </div>
                         </div>
                         <div class="brush-setting-row">
                             <label>Diameter:</label>
@@ -878,6 +927,7 @@
                         <button class="dropdown-item" data-shape="line">📏 Line</button>
                         <button class="dropdown-item" data-shape="rect">⬜ Rectangle</button>
                         <button class="dropdown-item" data-shape="circle">⭕ Circle</button>
+                        <button class="dropdown-item" data-shape="triangle">🔺 Triangle</button>
                     </div>
                 </div>
                 <button id="fillTool" title="Fill Bucket">🪣 Fill</button>
@@ -981,6 +1031,7 @@
                         <span>Layers</span>
                         <div class="layer-buttons">
                             <button class="add-layer-btn-inline" id="addLayerBtn" title="Add Layer">+</button>
+                            <button class="add-layer-btn-inline" id="duplicateLayerBtn" title="Duplicate Layer">⧉</button>
                             <button class="delete-layer-btn-inline" id="deleteLayerBtn" title="Delete Layer">-</button>
                         </div>
                     </div>
@@ -1182,9 +1233,14 @@
                 eraserDropdown.addEventListener('click', (e) => e.stopPropagation());
                 
                 // Brush dropdown controls
-                document.getElementById('brushShape').addEventListener('change', (e) => {
-                    this.brushShape = e.target.value;
-                    this.updateBrushCursor();
+                document.getElementById('brushShapePicker').querySelectorAll('.shape-icon').forEach(icon => {
+                    icon.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        this.brushShape = icon.dataset.shape;
+                        document.getElementById('brushShapePicker').querySelectorAll('.shape-icon').forEach(i => i.classList.remove('active'));
+                        icon.classList.add('active');
+                        this.updateBrushCursor();
+                    });
                 });
                 document.getElementById('brushDiameter').addEventListener('input', (e) => {
                     this.brushSize = parseInt(e.target.value);
@@ -1199,9 +1255,14 @@
                 });
                 
                 // Eraser dropdown controls
-                document.getElementById('eraserShape').addEventListener('change', (e) => {
-                    this.eraserShape = e.target.value;
-                    this.updateBrushCursor();
+                document.getElementById('eraserShapePicker').querySelectorAll('.shape-icon').forEach(icon => {
+                    icon.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        this.eraserShape = icon.dataset.shape;
+                        document.getElementById('eraserShapePicker').querySelectorAll('.shape-icon').forEach(i => i.classList.remove('active'));
+                        icon.classList.add('active');
+                        this.updateBrushCursor();
+                    });
                 });
                 document.getElementById('eraserDiameter').addEventListener('input', (e) => {
                     this.brushSize = parseInt(e.target.value);
@@ -1262,7 +1323,8 @@
                         const icons = {
                             'line': '📏',
                             'rect': '⬜',
-                            'circle': '⭕'
+                            'circle': '⭕',
+                            'triangle': '🔺'
                         };
                         shapeButton.innerHTML = `${icons[shape]} ${item.textContent.split(' ')[1]} ▼`;
                     });
@@ -1401,6 +1463,10 @@
                                 e.preventDefault();
                                 this.selectTool('eraser');
                                 break;
+                            case 'f':
+                                e.preventDefault();
+                                this.selectTool('fill');
+                                break;
                             case 'l':
                                 e.preventDefault();
                                 this.selectTool('lasso');
@@ -1499,6 +1565,7 @@
                 
                 // Layer controls
                 document.getElementById('addLayerBtn').addEventListener('click', () => this.addLayer());
+                document.getElementById('duplicateLayerBtn').addEventListener('click', () => this.duplicateLayer());
                 document.getElementById('deleteLayerBtn').addEventListener('click', () => this.deleteLayer());
                 
                 // Export
@@ -2107,7 +2174,7 @@
                     return;
                 }
                 
-                if (['line', 'rect', 'circle'].includes(this.tool) && this.shapeStart) {
+                if (['line', 'rect', 'circle', 'triangle'].includes(this.tool) && this.shapeStart) {
                     // Get current mouse position from last draw
                     const rect = this.canvas.getBoundingClientRect();
                     // Finalize shape by drawing it to the frame
@@ -2224,6 +2291,16 @@
                 const layer = this.getCurrentLayer();
                 const frame = layer.frames[this.currentFrameIndex];
                 
+                const drawTriangle = (ctx) => {
+                    const midX = (x1 + x2) / 2;
+                    ctx.beginPath();
+                    ctx.moveTo(midX, y1);
+                    ctx.lineTo(x2, y2);
+                    ctx.lineTo(x1, y2);
+                    ctx.closePath();
+                    ctx.stroke();
+                };
+                
                 if (preview) {
                     // Clear and redraw everything for preview
                     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
@@ -2254,6 +2331,8 @@
                         this.ctx.beginPath();
                         this.ctx.arc(x1, y1, radius, 0, Math.PI * 2);
                         this.ctx.stroke();
+                    } else if (this.tool === 'triangle') {
+                        drawTriangle(this.ctx);
                     }
                 } else {
                     // Draw final shape to frame
@@ -2276,6 +2355,8 @@
                         frameCtx.beginPath();
                         frameCtx.arc(x1, y1, radius, 0, Math.PI * 2);
                         frameCtx.stroke();
+                    } else if (this.tool === 'triangle') {
+                        drawTriangle(frameCtx);
                     }
                 }
             }
@@ -2334,6 +2415,35 @@
                     frames: []
                 };
                 this.layers.push(newLayer);
+                this.currentLayerId = newLayer.id;
+                this.renderLayers();
+                this.initializeFrame();
+                this.render();
+            }
+            
+            duplicateLayer() {
+                this.commitSelection();
+                this.saveState();
+                
+                const currentLayer = this.getCurrentLayer();
+                const newLayer = {
+                    id: this.nextLayerId++,
+                    name: currentLayer.name + ' copy',
+                    visible: currentLayer.visible,
+                    opacity: currentLayer.opacity,
+                    frames: currentLayer.frames.map(frame => {
+                        if (!frame) return null;
+                        const copy = document.createElement('canvas');
+                        copy.width = frame.width;
+                        copy.height = frame.height;
+                        copy.getContext('2d').drawImage(frame, 0, 0);
+                        return copy;
+                    })
+                };
+                
+                // Insert after current layer
+                const idx = this.layers.findIndex(l => l.id === this.currentLayerId);
+                this.layers.splice(idx + 1, 0, newLayer);
                 this.currentLayerId = newLayer.id;
                 this.renderLayers();
                 this.initializeFrame();
