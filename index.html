@@ -3394,6 +3394,8 @@
                     clearInterval(this.playbackInterval);
                     this.playbackInterval = null;
                 }
+                // Full render to rebuild timeline and layers UI
+                this.render();
             }
             
             render() {
@@ -3471,8 +3473,18 @@
                     this.ctx.restore();
                 }
                 
-                this.renderTimeline();
-                this.renderLayers();
+                // During playback, only update the active frame highlight — 
+                // skip full DOM rebuild to keep UI responsive
+                if (this.isPlaying) {
+                    const container = document.getElementById('framesContainer');
+                    const frames = container.querySelectorAll('.frame');
+                    frames.forEach((f, idx) => {
+                        f.classList.toggle('active', idx === this.currentFrameIndex);
+                    });
+                } else {
+                    this.renderTimeline();
+                    this.renderLayers();
+                }
             }
             
             renderLayers() {
