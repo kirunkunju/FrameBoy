@@ -989,6 +989,7 @@
                     <div class="dropdown-menu" id="exportDropdown">
                         <button class="dropdown-item" id="exportPngZip">PNG Frames (ZIP)</button>
                         <button class="dropdown-item" id="exportGifBtn">GIF Animation</button>
+                        <button class="dropdown-item" id="exportMp4Btn">MP4 Video</button>
                     </div>
                 </div>
             </div>
@@ -1309,6 +1310,8 @@
                     onionDropdown.classList.remove('show');
                     brushDropdown.classList.remove('show');
                     eraserDropdown.classList.remove('show');
+                    const ed = document.getElementById('exportDropdown');
+                    if (ed) ed.classList.remove('show');
                 });
                 
                 // Shape selection
@@ -1583,6 +1586,10 @@
                 document.getElementById('exportGifBtn').addEventListener('click', () => {
                     exportDropdown.classList.remove('show');
                     this.exportAsGif();
+                });
+                document.getElementById('exportMp4Btn').addEventListener('click', () => {
+                    exportDropdown.classList.remove('show');
+                    this.exportAsMp4();
                 });
             }
             
@@ -3991,8 +3998,9 @@
                     const frameImages = [];
                     
                     for (let i = 0; i < maxFrames; i++) {
-                        // Clear canvas
-                        tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+                        // White background for GIF export
+                        tempCtx.fillStyle = '#ffffff';
+                        tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
                         
                         // Render all visible layers for this frame
                         for (const layer of this.layers) {
@@ -4009,7 +4017,7 @@
                         // Convert to data URL
                         frameImages.push(tempCanvas.toDataURL('image/png'));
                         
-                        // Update progress - double check we have the right button
+                        // Update progress
                         const currentBtn = document.getElementById('exportBtn');
                         if (currentBtn && currentBtn.id === 'exportBtn') {
                             const progress = Math.round((i / maxFrames) * 50);
@@ -4063,10 +4071,9 @@
                                 URL.revokeObjectURL(url);
                             }, 100);
                             
-                            // Restore button - get fresh reference and verify it
+                            // Restore button
                             const finalBtn = document.getElementById('exportBtn');
                             if (finalBtn && finalBtn.id === 'exportBtn') {
-                                console.log('Restoring export button to:', originalText);
                                 finalBtn.textContent = '✓ GIF Downloaded!';
                                 finalBtn.disabled = false;
                                 setTimeout(() => {
@@ -4089,6 +4096,136 @@
                         errorBtn.disabled = false;
                     }
                     alert(`Failed to create GIF: ${error.message}\n\nTry PNG ZIP export instead.`);
+                }
+            }
+            
+            async exportAsMp4() {
+                const exportBtn = document.getElementById('exportBtn');
+                const originalText = exportBtn.textContent;
+                
+                try {
+                    exportBtn.textContent = 'Creating MP4...';
+                    exportBtn.disabled = true;
+                    
+                    const maxFrames = Math.max(...this.layers.map(l => l.frames.length));
+                    
+                    if (maxFrames === 0) {
+                        alert('No frames to export!');
+                        exportBtn.textContent = originalText;
+                        exportBtn.disabled = false;
+                        return;
+                    }
+                    
+                    if (!window.MediaRecorder) {
+                        throw new Error('Video recording not supported in this browser');
+                    }
+                    
+                    // Create a temporary canvas for recording
+                    const recordCanvas = document.createElement('canvas');
+                    recordCanvas.width = this.canvas.width;
+                    recordCanvas.height = this.canvas.height;
+                    const recordCtx = recordCanvas.getContext('2d');
+                    
+                    // Try best available video format
+                    let mimeType = 'video/webm;codecs=vp9';
+                    let fileExt = 'webm';
+                    
+                    if (MediaRecorder.isTypeSupported('video/mp4;codecs=avc1')) {
+                        mimeType = 'video/mp4;codecs=avc1';
+                        fileExt = 'mp4';
+                    } else if (MediaRecorder.isTypeSupported('video/mp4')) {
+                        mimeType = 'video/mp4';
+                        fileExt = 'mp4';
+                    } else if (MediaRecorder.isTypeSupported('video/webm;codecs=h264')) {
+                        mimeType = 'video/webm;codecs=h264';
+                        fileExt = 'mp4';
+                    }
+                    
+                    // Get canvas stream
+                    const stream = recordCanvas.captureStream(this.fps);
+                    const mediaRecorder = new MediaRecorder(stream, {
+                        mimeType: mimeType,
+                        videoBitsPerSecond: 5000000
+                    });
+                    
+                    const chunks = [];
+                    
+                    mediaRecorder.ondataavailable = (e) => {
+                        if (e.data.size > 0) {
+                            chunks.push(e.data);
+                        }
+                    };
+                    
+                    mediaRecorder.onstop = () => {
+                        const blob = new Blob(chunks, { type: mimeType.split(';')[0] });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `frameboy-animation-${Date.now()}.${fileExt}`;
+                        a.style.display = 'none';
+                        document.body.appendChild(a);
+                        a.click();
+                        
+                        setTimeout(() => {
+                            document.body.removeChild(a);
+                            URL.revokeObjectURL(url);
+                        }, 100);
+                        
+                        exportBtn.textContent = '✓ Video Downloaded!';
+                        exportBtn.disabled = false;
+                        setTimeout(() => {
+                            exportBtn.textContent = originalText;
+                        }, 2000);
+                    };
+                    
+                    mediaRecorder.onerror = (e) => {
+                        console.error('MediaRecorder error:', e);
+                        exportBtn.textContent = originalText;
+                        exportBtn.disabled = false;
+                        alert('Video recording failed.');
+                    };
+                    
+                    // Start recording
+                    mediaRecorder.start();
+                    
+                    // Play through all frames
+                    const frameDelay = 1000 / this.fps;
+                    let currentFrame = 0;
+                    
+                    const drawNextFrame = () => {
+                        if (currentFrame < maxFrames) {
+                            // White background
+                            recordCtx.fillStyle = '#ffffff';
+                            recordCtx.fillRect(0, 0, recordCanvas.width, recordCanvas.height);
+                            
+                            // Draw all visible layers for this frame
+                            for (const layer of this.layers) {
+                                if (layer.visible && layer.frames[currentFrame]) {
+                                    recordCtx.globalAlpha = layer.opacity || 1.0;
+                                    recordCtx.drawImage(layer.frames[currentFrame], 0, 0);
+                                    recordCtx.globalAlpha = 1.0;
+                                }
+                            }
+                            
+                            const progress = Math.round((currentFrame / maxFrames) * 100);
+                            exportBtn.textContent = `Recording MP4... ${progress}%`;
+                            
+                            currentFrame++;
+                            setTimeout(drawNextFrame, frameDelay);
+                        } else {
+                            setTimeout(() => {
+                                mediaRecorder.stop();
+                            }, frameDelay * 2);
+                        }
+                    };
+                    
+                    drawNextFrame();
+                    
+                } catch (error) {
+                    console.error('MP4 export error:', error);
+                    exportBtn.textContent = originalText;
+                    exportBtn.disabled = false;
+                    alert(`Video export failed: ${error.message}`);
                 }
             }
             
