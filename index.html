@@ -2045,7 +2045,7 @@
                     }
                 } else {
                     // Preview shape
-                    this.drawShape(this.shapeStart.x, this.shapeStart.y, x, y, true);
+                    this.drawShape(this.shapeStart.x, this.shapeStart.y, x, y, true, e.shiftKey, e.altKey);
                 }
             }
             
@@ -2177,12 +2177,14 @@
                 if (['line', 'rect', 'circle', 'triangle'].includes(this.tool) && this.shapeStart) {
                     // Get current mouse position from last draw
                     const rect = this.canvas.getBoundingClientRect();
+                    const scaleX = this.canvas.width / rect.width;
+                    const scaleY = this.canvas.height / rect.height;
                     // Finalize shape by drawing it to the frame
                     const mouseEvent = window.lastMouseEvent;
                     if (mouseEvent) {
-                        const x = mouseEvent.clientX - rect.left;
-                        const y = mouseEvent.clientY - rect.top;
-                        this.drawShape(this.shapeStart.x, this.shapeStart.y, x, y, false);
+                        const x = (mouseEvent.clientX - rect.left) * scaleX;
+                        const y = (mouseEvent.clientY - rect.top) * scaleY;
+                        this.drawShape(this.shapeStart.x, this.shapeStart.y, x, y, false, mouseEvent.shiftKey, mouseEvent.altKey);
                     }
                 }
                 
@@ -2287,18 +2289,69 @@
                 }
             }
             
-            drawShape(x1, y1, x2, y2, preview = false) {
+            drawShape(x1, y1, x2, y2, preview = false, shiftKey = false, altKey = false) {
                 const layer = this.getCurrentLayer();
                 const frame = layer.frames[this.currentFrameIndex];
                 
-                const drawTriangle = (ctx) => {
-                    const midX = (x1 + x2) / 2;
-                    ctx.beginPath();
-                    ctx.moveTo(midX, y1);
-                    ctx.lineTo(x2, y2);
-                    ctx.lineTo(x1, y2);
-                    ctx.closePath();
-                    ctx.stroke();
+                // Constrain aspect ratio when shift is held
+                let sx1 = x1, sy1 = y1, sx2 = x2, sy2 = y2;
+                if (shiftKey) {
+                    const dx = x2 - x1;
+                    const dy = y2 - y1;
+                    const absDx = Math.abs(dx);
+                    const absDy = Math.abs(dy);
+                    
+                    if (this.tool === 'line') {
+                        // Snap to nearest 45° angle
+                        const angle = Math.atan2(dy, dx);
+                        const snapAngle = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        sx2 = x1 + Math.cos(snapAngle) * dist;
+                        sy2 = y1 + Math.sin(snapAngle) * dist;
+                    } else {
+                        // Force square aspect ratio for rect, circle, triangle
+                        const size = Math.max(absDx, absDy);
+                        sx2 = x1 + size * Math.sign(dx || 1);
+                        sy2 = y1 + size * Math.sign(dy || 1);
+                    }
+                }
+                
+                // Draw from center when alt/option is held
+                if (altKey && this.tool !== 'line') {
+                    const dx = sx2 - sx1;
+                    const dy = sy2 - sy1;
+                    sx1 = x1 - dx;
+                    sy1 = y1 - dy;
+                    sx2 = x1 + dx;
+                    sy2 = y1 + dy;
+                }
+                
+                const drawShapeOnCtx = (ctx) => {
+                    if (this.tool === 'line') {
+                        ctx.beginPath();
+                        ctx.moveTo(sx1, sy1);
+                        ctx.lineTo(sx2, sy2);
+                        ctx.stroke();
+                    } else if (this.tool === 'rect') {
+                        ctx.strokeRect(sx1, sy1, sx2 - sx1, sy2 - sy1);
+                    } else if (this.tool === 'circle') {
+                        // Draw ellipse inscribed in bounding box (corner-to-corner)
+                        const cx = (sx1 + sx2) / 2;
+                        const cy = (sy1 + sy2) / 2;
+                        const rx = Math.abs(sx2 - sx1) / 2;
+                        const ry = Math.abs(sy2 - sy1) / 2;
+                        ctx.beginPath();
+                        ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+                        ctx.stroke();
+                    } else if (this.tool === 'triangle') {
+                        const midX = (sx1 + sx2) / 2;
+                        ctx.beginPath();
+                        ctx.moveTo(midX, sy1);
+                        ctx.lineTo(sx2, sy2);
+                        ctx.lineTo(sx1, sy2);
+                        ctx.closePath();
+                        ctx.stroke();
+                    }
                 };
                 
                 if (preview) {
@@ -2318,22 +2371,7 @@
                     this.ctx.lineCap = 'round';
                     this.ctx.lineJoin = 'round';
                     this.ctx.globalCompositeOperation = 'source-over';
-                    
-                    if (this.tool === 'line') {
-                        this.ctx.beginPath();
-                        this.ctx.moveTo(x1, y1);
-                        this.ctx.lineTo(x2, y2);
-                        this.ctx.stroke();
-                    } else if (this.tool === 'rect') {
-                        this.ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
-                    } else if (this.tool === 'circle') {
-                        const radius = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
-                        this.ctx.beginPath();
-                        this.ctx.arc(x1, y1, radius, 0, Math.PI * 2);
-                        this.ctx.stroke();
-                    } else if (this.tool === 'triangle') {
-                        drawTriangle(this.ctx);
-                    }
+                    drawShapeOnCtx(this.ctx);
                 } else {
                     // Draw final shape to frame
                     const frameCtx = frame.getContext('2d');
@@ -2342,22 +2380,7 @@
                     frameCtx.lineCap = 'round';
                     frameCtx.lineJoin = 'round';
                     frameCtx.globalCompositeOperation = 'source-over';
-                    
-                    if (this.tool === 'line') {
-                        frameCtx.beginPath();
-                        frameCtx.moveTo(x1, y1);
-                        frameCtx.lineTo(x2, y2);
-                        frameCtx.stroke();
-                    } else if (this.tool === 'rect') {
-                        frameCtx.strokeRect(x1, y1, x2 - x1, y2 - y1);
-                    } else if (this.tool === 'circle') {
-                        const radius = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
-                        frameCtx.beginPath();
-                        frameCtx.arc(x1, y1, radius, 0, Math.PI * 2);
-                        frameCtx.stroke();
-                    } else if (this.tool === 'triangle') {
-                        drawTriangle(frameCtx);
-                    }
+                    drawShapeOnCtx(frameCtx);
                 }
             }
             
