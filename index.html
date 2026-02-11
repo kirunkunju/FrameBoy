@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="2D Animation Studio - Create frame-by-frame animations">
-    <title>FrameBoy.v0</title>
+    <title>Frameboy.v0</title>
     <!-- Gifshot library for GIF export (more reliable than gif.js) -->
     <script src="https://cdn.jsdelivr.net/npm/gifshot@0.4.5/dist/gifshot.min.js"></script>
     <style>
@@ -534,6 +534,9 @@
             padding: 10px;
             gap: 5px;
             min-width: 100%;
+            user-select: none;
+            -webkit-user-select: none;
+            position: relative;
         }
 
         .frame {
@@ -545,7 +548,9 @@
             position: relative;
             flex-shrink: 0;
             background: #2a2a2a;
-            transition: transform 0.2s, opacity 0.2s;
+            transition: border-color 0.15s, transform 0.15s, opacity 0.15s;
+            user-select: none;
+            -webkit-user-select: none;
         }
         
         .frame:active {
@@ -553,14 +558,37 @@
         }
         
         .frame.dragging {
-            opacity: 0.5;
-            transform: scale(1.05);
+            opacity: 0.3;
+            transform: scale(0.9);
+        }
+
+        .frames-container.is-dragging .frame:not(.dragging) {
             cursor: grabbing;
         }
         
-        .frame.drag-over {
-            border-color: #0066cc;
-            background: #1a3a5a;
+        .frame-drag-ghost {
+            position: fixed;
+            pointer-events: none;
+            z-index: 9999;
+            opacity: 0.85;
+            border: 2px solid #4a9eff;
+            border-radius: 4px;
+            box-shadow: 0 4px 16px rgba(74, 158, 255, 0.4);
+            transform: translate(-50%, -50%) scale(1.05);
+            background: #2a2a2a;
+            overflow: hidden;
+        }
+        
+        .frame-drop-indicator {
+            position: absolute;
+            width: 3px;
+            height: 80px;
+            background: #4a9eff;
+            border-radius: 2px;
+            z-index: 10;
+            pointer-events: none;
+            box-shadow: 0 0 8px rgba(74, 158, 255, 0.6);
+            top: 10px;
         }
 
         .frame:hover {
@@ -585,6 +613,9 @@
             background: rgba(0, 0, 0, 0.7);
             padding: 2px 4px;
             border-radius: 2px;
+            user-select: none;
+            -webkit-user-select: none;
+            pointer-events: none;
         }
 
         .add-frame {
@@ -1121,6 +1152,7 @@
                 this.copiedSelection = null; // For selection copy/paste
                 this.copiedFrame = null; // For frame copy/paste
                 this.contextMenuFrameIndex = null; // Track which frame was right-clicked
+                this.selectionUndoStack = []; // Transform-level undo within floating selection
                 
                 this.initializeFrame();
                 this.setupEventListeners();
@@ -1475,6 +1507,7 @@
                                 this.selectTool('lasso');
                                 break;
                             case 'v':
+                            case 't':
                                 e.preventDefault();
                                 this.selectTool('transform');
                                 break;
@@ -1757,7 +1790,21 @@
             }
             
             undo() {
+                // If there's an active selection with transform history, undo the transform first
+                if (this.selection && this.selectionUndoStack.length > 0) {
+                    this.restoreSelectionState();
+                    return;
+                }
+                
                 if (this.undoStack.length === 0) return;
+                
+                // If there's an active selection with no transform history,
+                // apply it before saving current state to redo
+                if (this.selection) {
+                    this.applySelection();
+                    this.clearSelection();
+                    this.hideTransformHandles();
+                }
                 
                 // Save current state to redo stack before undoing
                 const currentState = {
@@ -1792,6 +1839,13 @@
             
             redo() {
                 if (this.redoStack.length === 0) return;
+                
+                // If there's an active selection, apply it before saving current state
+                if (this.selection) {
+                    this.applySelection();
+                    this.clearSelection();
+                    this.hideTransformHandles();
+                }
                 
                 // Save current state to undo stack before redoing
                 const currentState = {
@@ -1923,6 +1977,7 @@
                             
                             this.transformStart = {x, y};
                             this.isTransforming = true;
+                            this.saveSelectionState();
                             return;
                         }
                     }
@@ -1932,6 +1987,7 @@
                         this.activeHandle = {type: 'move'};
                         this.transformStart = {x, y};
                         this.isTransforming = true;
+                        this.saveSelectionState();
                         return;
                     }
                     
@@ -2956,7 +3012,32 @@
             clearSelection() {
                 this.selection = null;
                 this.transformHandles = [];
+                this.selectionUndoStack = [];
                 this.selectionCtx.clearRect(0, 0, this.selectionCanvas.width, this.selectionCanvas.height);
+            }
+            
+            saveSelectionState() {
+                if (!this.selection) return;
+                this.selectionUndoStack.push({
+                    bounds: { ...this.selection.bounds },
+                    originalBounds: { ...this.selection.originalBounds },
+                    rotation: this.selection.rotation || 0,
+                    anchorX: this.selection.anchorX,
+                    anchorY: this.selection.anchorY
+                });
+            }
+            
+            restoreSelectionState() {
+                if (!this.selection || this.selectionUndoStack.length === 0) return false;
+                const state = this.selectionUndoStack.pop();
+                this.selection.bounds = { ...state.bounds };
+                this.selection.originalBounds = { ...state.originalBounds };
+                this.selection.rotation = state.rotation;
+                this.selection.anchorX = state.anchorX;
+                this.selection.anchorY = state.anchorY;
+                this.showTransformHandles();
+                this.render();
+                return true;
             }
             
             // Apply any active selection back to its frame and dismiss it
@@ -3542,13 +3623,18 @@
                 const container = document.getElementById('framesContainer');
                 container.innerHTML = '';
                 
+                // Re-append the drop indicator if it exists
+                if (this._dropIndicator) {
+                    this._dropIndicator.style.display = 'none';
+                    container.appendChild(this._dropIndicator);
+                }
+                
                 const layer = this.getCurrentLayer();
                 const maxFrames = Math.max(layer.frames.length, this.currentFrameIndex + 1);
                 
                 for (let i = 0; i < maxFrames; i++) {
                     const frameDiv = document.createElement('div');
                     frameDiv.className = 'frame' + (i === this.currentFrameIndex ? ' active' : '');
-                    frameDiv.draggable = true;
                     frameDiv.dataset.frameIndex = i;
                     
                     if (layer.frames[i]) {
@@ -3565,17 +3651,18 @@
                     frameNumber.textContent = i + 1;
                     frameDiv.appendChild(frameNumber);
                     
-                    // Click to select frame
-                    frameDiv.addEventListener('click', (e) => {
-                        // Don't select if we just finished dragging
-                        if (this.justDropped) {
-                            this.justDropped = false;
-                            return;
-                        }
-                        this.commitSelection();
-                        this.currentFrameIndex = i;
-                        this.initializeFrame();
-                        this.render();
+                    // Pointer-based drag: mousedown starts potential drag
+                    frameDiv.addEventListener('mousedown', (e) => {
+                        if (e.button !== 0) return; // left click only
+                        e.preventDefault(); // prevent text selection immediately
+                        
+                        this._frameDragState = {
+                            index: i,
+                            startX: e.clientX,
+                            startY: e.clientY,
+                            started: false,
+                            element: frameDiv
+                        };
                     });
                     
                     // Right-click context menu
@@ -3609,49 +3696,126 @@
                         }
                     });
                     
-                    // Drag start
-                    frameDiv.addEventListener('dragstart', (e) => {
-                        this.draggedFrameIndex = i;
-                        frameDiv.classList.add('dragging');
-                        e.dataTransfer.effectAllowed = 'move';
-                        e.dataTransfer.setData('text/html', frameDiv.innerHTML);
-                    });
+                    container.appendChild(frameDiv);
+                }
+                
+                // Set up document-level drag handlers (only once)
+                if (!this._frameDragBound) {
+                    this._frameDragBound = true;
                     
-                    // Drag end
-                    frameDiv.addEventListener('dragend', (e) => {
-                        frameDiv.classList.remove('dragging');
-                        document.querySelectorAll('.frame').forEach(f => f.classList.remove('drag-over'));
-                    });
+                    // Create reusable ghost and indicator elements
+                    this._dragGhost = document.createElement('div');
+                    this._dragGhost.className = 'frame-drag-ghost';
+                    this._dragGhost.style.display = 'none';
+                    document.body.appendChild(this._dragGhost);
                     
-                    // Drag over
-                    frameDiv.addEventListener('dragover', (e) => {
-                        e.preventDefault();
-                        e.dataTransfer.dropEffect = 'move';
-                        frameDiv.classList.add('drag-over');
-                        this.dropTargetIndex = i;
-                    });
+                    this._dropIndicator = document.createElement('div');
+                    this._dropIndicator.className = 'frame-drop-indicator';
+                    this._dropIndicator.style.display = 'none';
+                    container.appendChild(this._dropIndicator);
                     
-                    // Drag leave
-                    frameDiv.addEventListener('dragleave', (e) => {
-                        frameDiv.classList.remove('drag-over');
-                    });
-                    
-                    // Drop
-                    frameDiv.addEventListener('drop', (e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        frameDiv.classList.remove('drag-over');
+                    document.addEventListener('mousemove', (e) => {
+                        if (!this._frameDragState) return;
                         
-                        if (this.draggedFrameIndex !== null && this.draggedFrameIndex !== i) {
-                            this.reorderFrames(this.draggedFrameIndex, i);
-                            this.justDropped = true;
+                        const state = this._frameDragState;
+                        const dx = e.clientX - state.startX;
+                        const dy = e.clientY - state.startY;
+                        
+                        // Require minimum movement to start drag (5px)
+                        if (!state.started && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
+                            state.started = true;
+                            state.element.classList.add('dragging');
+                            
+                            // Show ghost with thumbnail clone
+                            const ghost = this._dragGhost;
+                            ghost.innerHTML = '';
+                            ghost.style.width = '80px';
+                            ghost.style.height = '80px';
+                            const thumb = state.element.querySelector('canvas');
+                            if (thumb) {
+                                const c = document.createElement('canvas');
+                                c.width = 80; c.height = 60;
+                                c.getContext('2d').drawImage(thumb, 0, 0);
+                                c.style.width = '100%';
+                                c.style.height = '100%';
+                                c.style.objectFit = 'contain';
+                                ghost.appendChild(c);
+                            }
+                            ghost.style.display = 'block';
                         }
                         
-                        this.draggedFrameIndex = null;
-                        this.dropTargetIndex = null;
+                        if (!state.started) return;
+                        e.preventDefault();
+                        
+                        // Move ghost to cursor
+                        this._dragGhost.style.left = e.clientX + 'px';
+                        this._dragGhost.style.top = e.clientY + 'px';
+                        
+                        // Find insertion position
+                        const containerEl = document.getElementById('framesContainer');
+                        const frames = containerEl.querySelectorAll('.frame');
+                        const containerRect = containerEl.getBoundingClientRect();
+                        let bestInsert = null;
+                        let bestDist = Infinity;
+                        
+                        for (const frame of frames) {
+                            const rect = frame.getBoundingClientRect();
+                            const idx = parseInt(frame.dataset.frameIndex);
+                            
+                            // Check left edge
+                            const leftDist = Math.abs(e.clientX - rect.left);
+                            if (leftDist < bestDist) {
+                                bestDist = leftDist;
+                                bestInsert = { idx, side: 'left', x: rect.left - containerRect.left };
+                            }
+                            // Check right edge
+                            const rightDist = Math.abs(e.clientX - rect.right);
+                            if (rightDist < bestDist) {
+                                bestDist = rightDist;
+                                bestInsert = { idx, side: 'right', x: rect.right - containerRect.left };
+                            }
+                        }
+                        
+                        if (bestInsert) {
+                            const insertIdx = bestInsert.side === 'right' ? bestInsert.idx + 1 : bestInsert.idx;
+                            // Don't show indicator adjacent to dragged frame's original position
+                            if (insertIdx === state.index || insertIdx === state.index + 1) {
+                                this._dropIndicator.style.display = 'none';
+                                state.insertIdx = undefined;
+                            } else {
+                                this._dropIndicator.style.display = 'block';
+                                this._dropIndicator.style.left = (bestInsert.x - 1) + 'px';
+                                state.insertIdx = insertIdx;
+                            }
+                        }
                     });
                     
-                    container.appendChild(frameDiv);
+                    document.addEventListener('mouseup', (e) => {
+                        if (!this._frameDragState) return;
+                        
+                        const state = this._frameDragState;
+                        
+                        // Clean up
+                        state.element.classList.remove('dragging');
+                        this._dragGhost.style.display = 'none';
+                        this._dropIndicator.style.display = 'none';
+                        
+                        if (state.started && state.insertIdx !== undefined) {
+                            // Convert insertion index to reorder target
+                            const target = state.insertIdx > state.index ? state.insertIdx - 1 : state.insertIdx;
+                            if (target !== state.index) {
+                                this.reorderFrames(state.index, target);
+                            }
+                        } else if (!state.started) {
+                            // It was just a click, not a drag — select the frame
+                            this.commitSelection();
+                            this.currentFrameIndex = state.index;
+                            this.initializeFrame();
+                            this.render();
+                        }
+                        
+                        this._frameDragState = null;
+                    });
                 }
                 
                 // Add new frame button
