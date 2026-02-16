@@ -287,6 +287,7 @@
             -webkit-user-select: none;
             -moz-user-select: none;
             -ms-user-select: none;
+            touch-action: none;
         }
         
         .layer-item.dragging {
@@ -301,6 +302,7 @@
             right: 0;
             height: 3px;
             background: #00cc66;
+            z-index: 10;
         }
         
         .layer-item.drop-after::after {
@@ -311,6 +313,22 @@
             right: 0;
             height: 3px;
             background: #00cc66;
+            z-index: 10;
+        }
+        
+        .layer-drag-handle {
+            cursor: grab;
+            color: #666;
+            font-size: 12px;
+            padding: 0 4px;
+            display: flex;
+            align-items: center;
+            flex-shrink: 0;
+            touch-action: none;
+        }
+        
+        .layer-drag-handle:active {
+            cursor: grabbing;
         }
         
         .layer-header {
@@ -1926,9 +1944,11 @@
                 // Drag and drop properties
                 this.draggedFrameIndex = null;
                 this.dropTargetIndex = null;
-                this.draggedLayerId = null;
-                this.dropTargetLayerId = null;
-                this.dropPosition = null; // 'before' or 'after'
+                this._layerDragId = null;
+                this._layerDropTarget = null;
+                this._layerDropPos = null;
+                this._layerDragDidMove = false;
+                this._layerDragStartY = 0;
                 
                 // Lasso and selection properties
                 this.lassoPath = [];
@@ -2620,6 +2640,9 @@
                             this.pointerType = 'pen';
                             this.currentPressure = touch.force > 0 ? touch.force : 0.5;
                         } else {
+                            // Palm rejection: once Apple Pencil is detected, ignore
+                            // finger/knuckle touches for drawing (still works for pan/zoom above)
+                            if (this.hasStylusInput) return;
                             this.pointerType = 'touch';
                             this.currentPressure = 0.5;
                         }
@@ -5605,11 +5628,15 @@
                     
                     const div = document.createElement('div');
                     div.className = 'layer-item' + (layer.id === this.currentLayerId ? ' active' : '');
-                    div.draggable = true;
                     div.dataset.layerId = layer.id;
                     
                     const headerDiv = document.createElement('div');
                     headerDiv.className = 'layer-header';
+                    
+                    // Drag handle (grip icon)
+                    const dragHandle = document.createElement('span');
+                    dragHandle.className = 'layer-drag-handle';
+                    dragHandle.innerHTML = '<svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor"><circle cx="3" cy="2" r="1.5"/><circle cx="7" cy="2" r="1.5"/><circle cx="3" cy="7" r="1.5"/><circle cx="7" cy="7" r="1.5"/><circle cx="3" cy="12" r="1.5"/><circle cx="7" cy="12" r="1.5"/></svg>';
                     
                     const visibilitySpan = document.createElement('span');
                     visibilitySpan.className = 'layer-visibility';
@@ -5619,6 +5646,7 @@
                     nameSpan.className = 'layer-name';
                     nameSpan.textContent = layer.name;
                     
+                    headerDiv.appendChild(dragHandle);
                     headerDiv.appendChild(visibilitySpan);
                     headerDiv.appendChild(nameSpan);
                     
@@ -5656,10 +5684,11 @@
                     
                     // Click handlers
                     headerDiv.addEventListener('click', (e) => {
+                        if (this._layerDragDidMove) return; // Ignore click after drag
                         if (e.target.classList.contains('layer-visibility')) {
                             layer.visible = !layer.visible;
                             this.render();
-                        } else {
+                        } else if (!e.target.closest('.layer-drag-handle')) {
                             this.commitSelection();
                             this.currentLayerId = layer.id;
                             this.initializeFrame();
@@ -5667,78 +5696,100 @@
                         }
                     });
                     
-                    // Drag and drop handlers
-                    div.addEventListener('dragstart', (e) => {
-                        this.draggedLayerId = layer.id;
+                    // Pointer-based drag reordering (works on iPad + desktop)
+                    const startDrag = (startY) => {
+                        this._layerDragId = layer.id;
+                        this._layerDragDidMove = false;
+                        this._layerDragStartY = startY;
                         div.classList.add('dragging');
-                    });
+                    };
                     
-                    div.addEventListener('dragend', (e) => {
-                        div.classList.remove('dragging');
-                        this.draggedLayerId = null;
-                        this.dropTargetLayerId = null;
-                        // Remove all drop indicators
-                        document.querySelectorAll('.layer-item').forEach(item => {
-                            item.classList.remove('drop-before', 'drop-after');
-                        });
-                    });
-                    
-                    div.addEventListener('dragover', (e) => {
+                    dragHandle.addEventListener('pointerdown', (e) => {
                         e.preventDefault();
-                        if (this.draggedLayerId === null || this.draggedLayerId === layer.id) return;
+                        e.stopPropagation();
+                        startDrag(e.clientY);
                         
-                        const rect = div.getBoundingClientRect();
-                        const midpoint = rect.top + rect.height / 2;
+                        const onMove = (me) => {
+                            if (this._layerDragId === null) return;
+                            if (Math.abs(me.clientY - this._layerDragStartY) > 3) {
+                                this._layerDragDidMove = true;
+                            }
+                            if (!this._layerDragDidMove) return;
+                            
+                            // Find which layer item we're over
+                            const items = layersList.querySelectorAll('.layer-item');
+                            items.forEach(item => item.classList.remove('drop-before', 'drop-after'));
+                            
+                            for (const item of items) {
+                                if (item.dataset.layerId == this._layerDragId) continue;
+                                const rect = item.getBoundingClientRect();
+                                if (me.clientY >= rect.top && me.clientY <= rect.bottom) {
+                                    const mid = rect.top + rect.height / 2;
+                                    if (me.clientY < mid) {
+                                        item.classList.add('drop-before');
+                                        this._layerDropTarget = parseInt(item.dataset.layerId);
+                                        this._layerDropPos = 'before';
+                                    } else {
+                                        item.classList.add('drop-after');
+                                        this._layerDropTarget = parseInt(item.dataset.layerId);
+                                        this._layerDropPos = 'after';
+                                    }
+                                    break;
+                                }
+                            }
+                        };
                         
-                        // Remove all drop indicators first
-                        document.querySelectorAll('.layer-item').forEach(item => {
-                            item.classList.remove('drop-before', 'drop-after');
-                        });
+                        const onUp = () => {
+                            document.removeEventListener('pointermove', onMove);
+                            document.removeEventListener('pointerup', onUp);
+                            document.removeEventListener('pointercancel', onUp);
+                            
+                            div.classList.remove('dragging');
+                            layersList.querySelectorAll('.layer-item').forEach(item => {
+                                item.classList.remove('drop-before', 'drop-after');
+                            });
+                            
+                            if (this._layerDragDidMove && this._layerDropTarget != null) {
+                                this._reorderLayer(this._layerDragId, this._layerDropTarget, this._layerDropPos);
+                            }
+                            
+                            this._layerDragId = null;
+                            this._layerDropTarget = null;
+                            this._layerDropPos = null;
+                            // Delay clearing flag so click handler can check it
+                            setTimeout(() => { this._layerDragDidMove = false; }, 0);
+                        };
                         
-                        if (e.clientY < midpoint) {
-                            div.classList.add('drop-before');
-                            this.dropTargetLayerId = layer.id;
-                            this.dropPosition = 'before';
-                        } else {
-                            div.classList.add('drop-after');
-                            this.dropTargetLayerId = layer.id;
-                            this.dropPosition = 'after';
-                        }
-                    });
-                    
-                    div.addEventListener('drop', (e) => {
-                        e.preventDefault();
-                        if (this.draggedLayerId === null || this.dropTargetLayerId === null) return;
-                        
-                        // Find indices
-                        const draggedIndex = this.layers.findIndex(l => l.id === this.draggedLayerId);
-                        const targetIndex = this.layers.findIndex(l => l.id === this.dropTargetLayerId);
-                        
-                        if (draggedIndex === -1 || targetIndex === -1) return;
-                        
-                        // Remove dragged layer
-                        const [draggedLayer] = this.layers.splice(draggedIndex, 1);
-                        
-                        // Calculate new index (account for removed item)
-                        let newIndex = targetIndex;
-                        if (draggedIndex < targetIndex) {
-                            newIndex--;
-                        }
-                        
-                        if (this.dropPosition === 'before') {
-                            newIndex++;
-                        }
-                        
-                        // Insert at new position
-                        this.layers.splice(newIndex, 0, draggedLayer);
-                        
-                        // Re-render
-                        this.renderLayers();
-                        this.render();
+                        document.addEventListener('pointermove', onMove);
+                        document.addEventListener('pointerup', onUp);
+                        document.addEventListener('pointercancel', onUp);
                     });
                     
                     layersList.appendChild(div);
                 });
+            }
+            
+            _reorderLayer(dragId, targetId, position) {
+                // The UI is reversed: top of list = top layer = end of array
+                const dragIdx = this.layers.findIndex(l => l.id === dragId);
+                const targetIdx = this.layers.findIndex(l => l.id === targetId);
+                if (dragIdx === -1 || targetIdx === -1 || dragIdx === targetIdx) return;
+                
+                this.saveFullState();
+                
+                const [draggedLayer] = this.layers.splice(dragIdx, 1);
+                
+                // Recalculate target index after removal
+                let newIdx = this.layers.findIndex(l => l.id === targetId);
+                
+                // UI is reversed: "before" in UI (above) = higher in stack = higher array index
+                if (position === 'before') {
+                    newIdx += 1; // Insert after in array = above in UI
+                }
+                
+                this.layers.splice(newIdx, 0, draggedLayer);
+                this.renderLayers();
+                this.render();
             }
             
             renderTimeline() {
