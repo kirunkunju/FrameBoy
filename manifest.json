@@ -1,0 +1,25 @@
+{
+  "name": "FrameBoy",
+  "short_name": "FrameBoy",
+  "description": "Frame-by-frame animation tool",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#1e1e1e",
+  "theme_color": "#1e1e1e",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='64' fill='%231e1e1e'/><rect x='64' y='64' width='384' height='384' rx='16' fill='none' stroke='%230066cc' stroke-width='24'/><circle cx='256' cy='256' r='80' fill='%230066cc'/><rect x='180' y='100' width='24' height='40' rx='4' fill='%23666'/><rect x='308' y='100' width='24' height='40' rx='4' fill='%23666'/><rect x='180' y='372' width='24' height='40' rx='4' fill='%23666'/><rect x='308' y='372' width='24' height='40' rx='4' fill='%23666'/></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "file_handlers": [
+    {
+      "action": ".",
+      "accept": {
+        "application/octet-stream": [".fby"]
+      }
+    }
+  ]
+}
