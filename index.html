@@ -2635,7 +2635,7 @@
                             return;
                         }
                         
-                        if (touch.touchType === 'stylus' || (touch.force > 0 && touch.force !== 1)) {
+                        if (touch.touchType === 'stylus') {
                             this.hasStylusInput = true;
                             this.pointerType = 'pen';
                             this.currentPressure = touch.force > 0 ? touch.force : 0.5;
@@ -2685,7 +2685,7 @@
                         const touch = e.touches[0];
                         if (!touch) return;
                         
-                        if ((touch.touchType === 'stylus' || touch.force > 0) && touch.force > 0) {
+                        if (touch.touchType === 'stylus' && touch.force > 0) {
                             this.currentPressure = touch.force;
                         }
                         
